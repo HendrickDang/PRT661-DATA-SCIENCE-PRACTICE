@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.0.6 Chrome/138.0.7204.100 Electron/37.2.3 Safari/537.36">
   <diagram name="Architecture" id="arch1">
-    <mxGraphModel dx="1671" dy="1473" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1200" pageHeight="620" math="0" shadow="0">
+    <mxGraphModel dx="1447" dy="1354" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1200" pageHeight="620" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -90,17 +90,17 @@
         <mxCell id="xeya2N0jxXf9OclcNwrb-36" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;Ingest&lt;/b&gt;&lt;br&gt;Python" vertex="1">
           <mxGeometry height="92" width="150" x="190" y="-290" as="geometry" />
         </mxCell>
-        <mxCell id="xeya2N0jxXf9OclcNwrb-37" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;2. Data Storage&lt;/b&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;(local/cloud storage, database)&amp;nbsp;&lt;b&gt;&lt;/b&gt;&lt;/div&gt;&lt;div&gt;≈ Amazon S3&lt;/div&gt;" vertex="1">
-          <mxGeometry height="92" width="150" x="380" y="-290" as="geometry" />
+        <mxCell id="xeya2N0jxXf9OclcNwrb-37" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;2. Data Store&lt;/b&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;Storage (local/cloud storage, database)&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(237, 237, 237)); text-align: center;&quot;&gt;≈ Amazon S3&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(237, 237, 237)); text-align: center;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(237, 237, 237));&quot;&gt;Catalog (schema/pandas dtypes)&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;≈ AWS Glue Data Catalog&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(237, 237, 237));&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(237, 237, 237));&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="130" width="180" x="420" y="-309" as="geometry" />
         </mxCell>
         <mxCell id="xeya2N0jxXf9OclcNwrb-38" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;3. Data Processing&lt;/b&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;&lt;font style=&quot;&quot;&gt;Use Python to c&lt;/font&gt;&lt;font style=&quot;&quot;&gt;lean, standardise, mer&lt;/font&gt;&lt;/font&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;ge, feature engineering&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;≈ Amazon Athena (SQL)&lt;/font&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="92" width="150" x="570" y="-290" as="geometry" />
+          <mxGeometry height="92" width="150" x="660" y="-290" as="geometry" />
         </mxCell>
         <mxCell id="xeya2N0jxXf9OclcNwrb-39" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;4. Analytics / ML&lt;/b&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;Ridge regression, lag features&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;≈ Amazon SageMaker&lt;/font&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="92" width="150" x="760" y="-290" as="geometry" />
+          <mxGeometry height="92" width="150" x="850" y="-290" as="geometry" />
         </mxCell>
         <mxCell id="xeya2N0jxXf9OclcNwrb-40" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;5. Dashboard&lt;/b&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;for PFES&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;≈ Amazon QuickSight&lt;/font&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry height="92" width="150" x="950" y="-290" as="geometry" />
+          <mxGeometry height="92" width="150" x="1040" y="-290" as="geometry" />
         </mxCell>
         <mxCell id="xeya2N0jxXf9OclcNwrb-41" edge="1" parent="1" source="xeya2N0jxXf9OclcNwrb-42" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0;exitDx=0;exitDy=0;">
           <mxGeometry relative="1" as="geometry">
