@@ -99,6 +99,9 @@
         <mxCell id="xeya2N0jxXf9OclcNwrb-39" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;Analytics / ML&lt;/b&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;Ridge regression, lag features&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;≈ Amazon SageMaker&lt;/font&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="92" width="150" x="850" y="-290" as="geometry" />
         </mxCell>
+        <mxCell id="xeya2N0jxXf9OclcNwrb-51" edge="1" parent="1" source="xeya2N0jxXf9OclcNwrb-40" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="xeya2N0jxXf9OclcNwrb-50">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="xeya2N0jxXf9OclcNwrb-40" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;Dashboard&lt;/b&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;for PFES&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;≈ Amazon QuickSight&lt;/font&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="92" width="150" x="1040" y="-290" as="geometry" />
         </mxCell>
@@ -127,6 +130,9 @@
         </mxCell>
         <mxCell id="xeya2N0jxXf9OclcNwrb-49" edge="1" parent="1" source="xeya2N0jxXf9OclcNwrb-39" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#000000;strokeWidth=1;endArrow=block;" target="xeya2N0jxXf9OclcNwrb-40" value="">
           <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xeya2N0jxXf9OclcNwrb-50" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=11;arcSize=8;" value="&lt;b&gt;Monitor&lt;/b&gt;&lt;div&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;Drift and retrain checks&lt;/font&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="90" width="170" x="1270" y="-290" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
