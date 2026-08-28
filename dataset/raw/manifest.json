@@ -1,0 +1,116 @@
+{
+  "ingested_at_utc": "2026-08-28T15:00:08.922551+00:00",
+  "datasets": {
+    "crime_old": {
+      "source_file": "nt_crime_statistics_2020-2023.csv",
+      "rows": 46036,
+      "columns": [
+        "As At",
+        "Year",
+        "Month number",
+        "Offence category",
+        "Offence type",
+        "Alcohol involvement",
+        "DV involvement",
+        "Reporting region",
+        "Statistical Area 2",
+        "Number of offences"
+      ],
+      "saved_to": "dataset\\raw\\crime_old.csv",
+      "issues": []
+    },
+    "crime_new": {
+      "source_file": "nt_crime_statistics_latest.csv",
+      "rows": 9110,
+      "columns": [
+        "As At",
+        "Year",
+        "Month number",
+        "Offence category",
+        "Offence type ",
+        "Alcohol involvement",
+        "DV involvement",
+        "Reporting Region",
+        "Statistical Area 2",
+        "Number of offences"
+      ],
+      "saved_to": "dataset\\raw\\crime_new.csv",
+      "issues": []
+    },
+    "population": {
+      "source_file": "nt-population-regions_1986-to-2025.xlsx",
+      "rows": 17280,
+      "columns": [
+        "Year",
+        "Status",
+        "Sex",
+        "Age Group",
+        "Aboriginal status",
+        "Region",
+        "Population"
+      ],
+      "saved_to": "dataset\\raw\\population.csv",
+      "issues": []
+    },
+    "alcohol_2023": {
+      "source_file": "wholesale-alcohol-supply-by-quarter-2023.xlsx",
+      "rows": 28,
+      "columns": [
+        "Region",
+        "Quarter Ending",
+        "Cask Wine PAC",
+        "Bottled Wine PAC",
+        "Fortified Wine PAC",
+        "Cider PAC",
+        "Standard Spirits PAC",
+        "Mixed Spirits PAC",
+        "Full-Strength Beer PAC",
+        "Mid-Strength Beer PAC",
+        "Low-Strength Beer PAC",
+        "Total PAC"
+      ],
+      "saved_to": "dataset\\raw\\alcohol_2023.csv",
+      "issues": []
+    },
+    "alcohol_2024": {
+      "source_file": "wholesale-alcohol-supply-by-quarter-2024.xlsx",
+      "rows": 28,
+      "columns": [
+        "Region",
+        "Quarter Ending",
+        "Cask Wine PAC",
+        "Bottled Wine PAC",
+        "Fortified Wine PAC",
+        "Cider PAC",
+        "Standard Spirits PAC",
+        "Mixed Spirits PAC",
+        "Full-Strength Beer PAC",
+        "Mid-Strength Beer PAC",
+        "Low-Strength Beer PAC",
+        "Total PAC"
+      ],
+      "saved_to": "dataset\\raw\\alcohol_2024.csv",
+      "issues": []
+    },
+    "alcohol_2025": {
+      "source_file": "wholesale-alcohol-supply-by-quarter-2025.xlsx",
+      "rows": 28,
+      "columns": [
+        "Region",
+        "Quarter Ending",
+        "Cask Wine PAC",
+        "Bottled Wine PAC",
+        "Fortified Wine PAC",
+        "Cider PAC",
+        "Standard Spirits PAC",
+        "Mixed Spirits PAC",
+        "Full-Strength Beer PAC",
+        "Mid-Strength Beer PAC",
+        "Low-Strength Beer PAC",
+        "Total PAC"
+      ],
+      "saved_to": "dataset\\raw\\alcohol_2025.csv",
+      "issues": []
+    }
+  }
+}
