@@ -1,33 +1,53 @@
 """
-pipeline.py
-===========
-Combined INGEST + DATA PROCESSING stages of the PRT661 forecasting pipeline
+End-to-end pipeline for the PRT661 NT assault forecasting project
 (Group DAN2 - Theme 2).
 
-This file is a straight merge of ingest.py and data_processing.py so the
-whole pipeline can be run with a single command instead of two. NOTHING in
-either script's logic was changed - every function body, every comment,
-every [A1]-[A5] assumption, the fuzzy filename matching, the rename_columns
-workaround, all of it is copied over exactly as it was. The only changes
-are the mechanical ones needed to make two separate scripts coexist in one
-file without clashing:
+    INGEST      dataset/source/  -> dataset/raw/*.csv + manifest.json
+    PANEL       dataset/raw/     -> dataset/processed/nt_crime_merged_2015_2025.csv
+    EDA         -> eda_plots/*.png
+    PCA         -> age-structure components
+    REGRESSION  -> regression_plots/*.png  (Model A and Model B)
 
-  - BASE_DIR / RAW_DIR are defined once instead of twice (both scripts
-    computed the exact same paths independently, so sharing them changes
-    nothing).
-  - ingest.py's main() is renamed ingest_main() and data_processing.py's
-    main() is renamed processing_main(), purely so Python doesn't see two
-    functions named "main" in the same file. Their bodies are untouched.
-  - At the very bottom, ingest_main() is called first and processing_main()
-    second - the same order you'd run the two original scripts in.
-
-If ingest_main() hits a missing file it calls sys.exit(1) exactly as
-before, which stops the whole pipeline.py run before processing_main() ever
-starts - same behaviour as if you'd stopped after a failed `python
-ingest.py` and never run `python data_processing.py`.
+Ingest is the only stage that touches the raw downloads, so portal renames and
+Excel sheet names stay in one place. A missing source file stops the run before
+any analysis happens.
 
 Run:
-    python pipeline.py
+    python "Ingest&Process pipeline.py"
+
+---------------------------------------------------------------------------
+ASSUMPTION LOG - the non-obvious decisions, referenced as [A#] in the code.
+---------------------------------------------------------------------------
+[A1]  Window is 2015-2025; the old crime file starts in 2008 and is trimmed.
+[A2]  CATEGORY_MAP converts old PROMIS category names to the ANZSOC names used
+      from Dec 2023, so "02 Assault" means one thing across the panel. An
+      unmapped category raises rather than silently becoming NaN.
+[A3]  November 2023 is missing from both files - a real gap from the systems
+      transition. Never filled in; it stays visible as NaN.
+[A4]  Reporting Region "Unknown" -> "Top End", the residual region.
+[A5]  Everything is harmonised onto the 6 NTG population regions: the seven
+      towns map to their service region, "NT Balance" is resolved by its SA2.
+      Replaces a crosswalk that gave Darwin and Palmerston the whole Greater
+      Darwin population each, which made every per-100k rate wrong.
+[A6]  Quarterly PAC is attached to all 3 months of its quarter, not divided by
+      3: it measures supply during the quarter.
+[A7]  PAC exists only for 2023-2025. Earlier years stay NaN; the region x
+      quarter mean fills only gaps inside 2023-2025.
+[A8]  Alcohol/DV involvement is counted in OFFENCES, not in matching source
+      rows. The new schema splits assault into 3 types instead of 2, so row
+      counts per region-month jump from ~4 to ~10 at the changeover.
+[A9]  The last 6 months are provisional (late-reported); flagged, not dropped.
+[A10] The regression panel uses a complete region x month grid so the lags are
+      true calendar lags - otherwise the [A3] gap makes Dec-2023 lag1 point at
+      October.
+[A11] Model A: no alcohol features, train 2015-2022, test 2023-2025.
+[A12] Model B: adds alcohol_per_capita, train 2023-2024, test 2025. Different
+      training window from Model A, so the errors are NOT comparable.
+[A13] CV rows are sorted by date before TimeSeriesSplit. Sorted by region, the
+      folds would train on one region and test on another.
+[A14] PCA uses age-group shares, not counts: counts all scale with region size,
+      leaving PC1 at ~99% and measuring only "how big is this region".
+---------------------------------------------------------------------------
 """
 
 import json
@@ -35,37 +55,58 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")  # write PNGs without needing a display
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 BASE_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = BASE_DIR / "dataset" / "source"
 RAW_DIR = BASE_DIR / "dataset" / "raw"
 PROCESSED_DIR = BASE_DIR / "dataset" / "processed"
+PLOT_DIR = BASE_DIR / "eda_plots"
+REG_PLOT_DIR = BASE_DIR / "regression_plots"
+
+YEAR_MIN, YEAR_MAX = 2015, 2025
+ALCOHOL_YEARS = (2023, 2024, 2025)
+
+
+def write_csv(df: pd.DataFrame, out_path: Path) -> None:
+    """Write df to out_path, turning Windows' file-lock error into a message
+    that says what to actually do about it."""
+    try:
+        df.to_csv(out_path, index=False)
+    except PermissionError as e:
+        raise PermissionError(
+            f"Cannot write to {out_path} - Windows says the file is in use. "
+            f"This almost always means it's currently open in Excel (or another "
+            f"program) on your computer. Close that file and run this script again."
+        ) from e
+
+
+def banner(text: str) -> None:
+    print()
+    print("=" * 70)
+    print(text)
+    print("=" * 70)
 
 
 # =============================================================================
-# SECTION 1 - INGEST (verbatim from ingest.py)
+# SECTION 1 - INGEST
 # =============================================================================
 
-# Every file we expect to find in dataset/source/, and how to read it.
-# "filename" is the name as currently downloaded from data.nt.gov.au. Add new
-# quarters/years here as the datasets are updated (e.g. wholesale alcohol
-# 2026) - that is the only line that should ever need to change.
-#
-# NOTE: file names on the NT Open Data Portal (and Windows' own "(2)" suffix
-# on a re-downloaded duplicate) are not perfectly stable - different team
-# members downloading the "same" dataset have ended up with slightly
-# different names. load_one() below does not fail immediately if the exact
-# name isn't found; it first tries a fuzzy match against every file actually
-# sitting in dataset/source/, so small naming differences between teammates'
-# downloads don't break the pipeline.
+# Every file we expect in dataset/source/, and how to read it. Adding a new
+# year/quarter should only ever mean adding an entry here.
 EXPECTED_FILES = {
-    "crime_2020_2023": {
+    # Filename says 2020-2023 but the data starts in 2008; [A1] trims it.
+    "crime_old": {
         "filename": "nt_crime_statistics_2020-2023.csv",
         "reader": "csv",
     },
-    "crime_latest": {
+    "crime_new": {
         "filename": "nt_crime_statistics_latest.csv",
         "reader": "csv",
     },
@@ -93,21 +134,15 @@ EXPECTED_FILES = {
 
 
 def _normalise(name: str) -> str:
-    """Strip everything but letters and digits, lowercase. Used only to
-    compare file names loosely (e.g. 'wholesale-alcohol-supply-by-quarter
-    -2024.xlsx' vs 'wholesalealcoholsupplybyquarter2024.xlsx' normalise to
-    the same string, and 'wholesale-alcohol-supply-by-quarter-2025 (2).xlsx'
-    - Windows' auto-renamed duplicate download - still matches)."""
+    """Lowercase, keep only letters and digits. Used to compare file names
+    loosely, ignoring dashes, underscores and Windows' " (2)" suffix."""
     return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
 def find_source_file(expected_filename: str) -> Path:
-    """Return the path to use for expected_filename. Tries the exact name
-    first; if that's missing, scans dataset/source/ for a file whose
-    normalised name matches or contains the expected one (handles
-    dash/underscore differences and Windows " (2)" duplicate suffixes) and
-    uses that instead (printing a note), so small naming differences don't
-    stop the whole pipeline."""
+    """The exact filename if present, else the first file in dataset/source/
+    whose normalised name matches or contains it - a near-miss name from a
+    teammate's download shouldn't stop the pipeline."""
     exact = SOURCE_DIR / expected_filename
     if exact.exists():
         return exact
@@ -116,7 +151,7 @@ def find_source_file(expected_filename: str) -> Path:
         raise FileNotFoundError(f"dataset/source/ does not exist yet: {SOURCE_DIR}")
 
     target = _normalise(Path(expected_filename).stem)
-    for candidate in SOURCE_DIR.iterdir():
+    for candidate in sorted(SOURCE_DIR.iterdir()):
         if not candidate.is_file():
             continue
         normalised_candidate = _normalise(candidate.stem)
@@ -127,23 +162,22 @@ def find_source_file(expected_filename: str) -> Path:
 
     raise FileNotFoundError(
         f"Expected source file not found: {exact}\n"
-        f"Place the raw download in dataset/source/ before running ingest.py "
-        f"(exact name doesn't have to match '{expected_filename}', but the file must be there)."
+        f"Place the raw download in dataset/source/ before running this script "
+        f"(the exact name doesn't have to match '{expected_filename}', but the "
+        f"file must be there)."
     )
 
 
 def load_one(spec: dict) -> pd.DataFrame:
     path = find_source_file(spec["filename"])
     if spec["reader"] == "csv":
-        df = pd.read_csv(path)
-    elif spec["reader"] == "excel":
-        df = pd.read_excel(path, sheet_name=spec["sheet_name"])
-    else:
-        raise ValueError(f"Unknown reader type: {spec['reader']}")
-    return df
+        return pd.read_csv(path)
+    if spec["reader"] == "excel":
+        return pd.read_excel(path, sheet_name=spec["sheet_name"])
+    raise ValueError(f"Unknown reader type: {spec['reader']}")
 
 
-def validate(name: str, df: pd.DataFrame) -> list:
+def validate(df: pd.DataFrame) -> list:
     """Cheap sanity checks - not full cleaning. If one of these fires, stop
     and look at the file before trusting anything downstream."""
     issues = []
@@ -157,12 +191,13 @@ def validate(name: str, df: pd.DataFrame) -> list:
     return issues
 
 
-def ingest_main():
-    print(f"[ingest] project root (this script's folder): {BASE_DIR}")
-    print(f"[ingest] looking for source files in: {SOURCE_DIR}")
+def ingest_main() -> None:
+    banner("STAGE 1 - INGEST: dataset/source/ -> dataset/raw/")
+    print(f"[ingest] project root: {BASE_DIR}")
+    print(f"[ingest] source files: {SOURCE_DIR}")
     if not SOURCE_DIR.exists():
-        print(f"[ingest] WARNING: that folder does not exist. Create dataset/source/ "
-              f"next to this script and put the 6 raw files in it.\n")
+        print("[ingest] WARNING: that folder does not exist. Create dataset/source/ "
+              "next to this script and put the 6 raw files in it.\n")
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     manifest = {"ingested_at_utc": datetime.now(timezone.utc).isoformat(), "datasets": {}}
     had_error = False
@@ -176,19 +211,12 @@ def ingest_main():
             had_error = True
             continue
 
-        issues = validate(name, df)
+        issues = validate(df)
         for issue in issues:
             print(f"  WARNING: {issue}")
 
         out_path = RAW_DIR / f"{name}.csv"
-        try:
-            df.to_csv(out_path, index=False)
-        except PermissionError as e:
-            raise PermissionError(
-                f"Cannot write to {out_path} - Windows says the file is in use. "
-                f"This almost always means it's currently open in Excel (or another "
-                f"program) on your computer. Close that file and run this script again."
-            ) from e
+        write_csv(df, out_path)
 
         manifest["datasets"][name] = {
             "source_file": spec["filename"],
@@ -197,11 +225,11 @@ def ingest_main():
             "saved_to": str(out_path.relative_to(BASE_DIR)),
             "issues": issues,
         }
-        print(f"  OK: {len(df)} rows, {len(df.columns)} columns -> {out_path.name}")
+        print(f"  OK: {len(df):,} rows, {len(df.columns)} columns -> {out_path.name}")
 
     manifest_path = RAW_DIR / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))
-    print(f"\n[ingest] manifest written to {manifest_path}")
+    print(f"\n[ingest] manifest written to {manifest_path.name}")
 
     if had_error:
         print("\n[ingest] finished WITH missing files - see SKIPPED lines above.")
@@ -210,264 +238,1015 @@ def ingest_main():
 
 
 # =============================================================================
-# SECTION 2 - DATA PROCESSING (verbatim from data_processing.py)
+# SECTION 2 - BUILD THE ANALYSIS PANEL
 # =============================================================================
 
 def rename_columns(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
-    """Drop-in replacement for df.rename(columns=mapping).
-
-    Some pandas/numpy version combinations (seen with the group's newer
-    prt564env conda environment) hit an internal pandas bug inside
-    DataFrame.rename() itself - it fails deep inside pandas' own indexer
-    machinery (Index.get_indexer_for -> ... -> Index.hasnans -> np.isnan),
-    not because of anything wrong with our data or column names. Rather
-    than depend on every teammate's machine having a pandas/numpy pairing
-    that avoids that internal path, we just reassign df.columns directly -
-    a plain Python list comprehension has no way to hit that bug, and the
-    result is identical to .rename(columns=mapping) in every case we use
-    it for here (no MultiIndex columns, no regex)."""
+    """Drop-in replacement for df.rename(columns=mapping), which crashes inside
+    pandas' own indexer code on some pandas/numpy pairings teammates have
+    installed. Reassigning df.columns is equivalent for our use (no MultiIndex
+    columns, no regex) and cannot hit that bug."""
     df = df.copy()
     df.columns = [mapping.get(c, c) for c in df.columns]
     return df
 
-# ---------------------------------------------------------------------------
-# ASSUMPTION LOG - decisions a marker or teammate needs to be able to see.
-# Every non-obvious choice below is numbered here and referenced in comments
-# with its [A#] tag. Copy this block into the report's data processing
-# section - assessors expect exactly this kind of documented judgement call.
-# ---------------------------------------------------------------------------
-# [A1] The two crime files use different classification schemes (PROMIS-era
-#      categories pre-Nov-2023 vs the ANZSOC-aligned scheme from Dec-2023,
-#      per Risk 1 in the project plan). We map both to a single "Assault"
-#      series: old file -> Offence type == 'Assault'; new file -> Offence
-#      type in {021 Serious Assault, 022 Assault of a prescribed officer,
-#      023 Common Assault}. Sexual assault (031/032) is a different offence
-#      category and is excluded on purpose.
-# [A2] November 2023 has NO data in either file (old file ends Oct-2023, new
-#      file starts Dec-2023) - a genuine one-month gap from the systems
-#      transition. We do not fabricate a value; the row is left as NaN so it
-#      is visible and can be interpolated or excluded deliberately later,
-#      never silently averaged away.
-# [A3] Per Risk 2 in the project plan, the most recent 6 months of crime data
-#      are provisional (late-reported offences). This script flags them with
-#      is_provisional=True rather than dropping them, so the modelling stage
-#      can decide whether to exclude them from train/test.
-# [A4] Wholesale alcohol PAC is only published quarterly. We assign the same
-#      quarterly Total PAC value to each of the 3 months in that quarter
-#      (not divided by 3) - it represents "supply during this quarter", so a
-#      monthly average would understate it. Document this if the model later
-#      normalises it.
-# [A5] Population data uses 6 NTG service-delivery regions (Barkly, Big
-#      Rivers, Central Australia, East Arnhem, Greater Darwin, Top End)
-#      while crime/alcohol data uses 7 police reporting regions (Alice
-#      Springs, Darwin, Katherine, Nhulunbuy, NT Balance, Palmerston,
-#      Tennant Creek) - Risk 4 in the project plan. The crosswalk below is
-#      an approximation based on which town sits in which service region,
-#      NOT an official NTG concordance. "NT Balance" is the weakest link -
-#      it is a catch-all for everywhere outside the seven towns, so it does
-#      not map cleanly onto a single population region. BEFORE this goes in
-#      the final report, verify this crosswalk against the region
-#      boundary maps on data.nt.gov.au, or rebuild it bottom-up from the
-#      Statistical Area 2 column, which uses recognisable ABS geography.
-REGION_CROSSWALK_POLICE_TO_POPULATION = {
+
+# [A2] old PROMIS offence category -> new ANZSOC offence category
+CATEGORY_MAP = {
+    "Acts intended to cause Injury": "02 Assault",
+    "Homicide and related Offences": "01 Homicide",
+    "Abduction - harassment and other offences against the person":
+        "04 Harm or endanger persons",
+    "Other dangerous or negligent acts endangering persons":
+        "04 Harm or endanger persons",
+    "Sexual assault and related offences": "03 Sexual offences",
+    "Robbery - extortion and related offences":
+        "05 Robbery, blackmail, and extortion",
+    "House break-ins": "061 Burglary - dwelling",
+    "Commercial break-ins": "062 Burglary - non-residential",
+    "Motor vehicle theft and related offences": "07 Theft",
+    "Theft and related offences (other than MV)": "07 Theft",
+    "Property Damage Offences": "11 Property damage offences",
+}
+
+KEEP_COLS = ["Year", "Month number", "Offence category", "Offence type",
+             "Alcohol involvement", "DV involvement",
+             "Reporting Region", "Statistical Area 2", "Number of offences"]
+
+# [A5] "NT Balance" rows carry no town, so they are resolved through SA2.
+SA2_TO_REGION = {
+    "Barkly": "Barkly",
+    "Sandover - Plenty": "Barkly",
+    "Elsey": "Big Rivers",
+    "Gulf": "Big Rivers",
+    "Victoria River": "Big Rivers",
+    "Petermann - Simpson": "Central Australia",
+    "Tanami": "Central Australia",
+    "Yuendumu - Anmatjere": "Central Australia",
+    "East Arnhem": "East Arnhem",
+    "Anindilyakwa": "East Arnhem",
+    "Alligator": "Top End",
+    "West Arnhem": "Top End",
+    "Thamarrurr": "Top End",
+    "Tiwi Islands": "Top End",
+    "Daly": "Top End",
+    "Howard Springs": "Greater Darwin",
+    "Humpty Doo": "Greater Darwin",
+    "Koolpinyah": "Greater Darwin",
+    "Virginia": "Greater Darwin",
+    "Weddell": "Greater Darwin",
+}
+
+REGION_TO_POP = {
     "Darwin": "Greater Darwin",
     "Palmerston": "Greater Darwin",
     "Alice Springs": "Central Australia",
     "Katherine": "Big Rivers",
-    "Tennant Creek": "Barkly",
     "Nhulunbuy": "East Arnhem",
-    "NT Balance": "Top End",  # [A5] weakest link - approximation, verify
+    "Tennant Creek": "Barkly",
+    "NT Balance": "Top End",
+    "Top End": "Top End",
 }
 
-ASSAULT_TYPES_OLD = {"Assault"}
-ASSAULT_TYPES_NEW = {
-    "021 Serious Assault",
-    "022 Assault of a prescribed officer",
-    "023 Common Assault",
-}
+REGION_ORDER = ["Greater Darwin", "Central Australia", "Big Rivers",
+                "East Arnhem", "Barkly", "Top End"]
+MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+ASSAULT_CATEGORY = "02 Assault"
+
+
+def _read_raw(name: str) -> pd.DataFrame:
+    path = RAW_DIR / f"{name}.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} is missing - the ingest stage creates it. Run this script "
+            f"from the top rather than calling later stages directly."
+        )
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.strip()   # the new file ships 'Offence type '
+    return df
+
+
+def load_crime_old() -> pd.DataFrame:
+    """Old file: trim to the analysis window, remap categories and regions."""
+    df = _read_raw("crime_old")
+    df = df[df["Year"].between(YEAR_MIN, YEAR_MAX)].copy()               # [A1]
+    df = rename_columns(df, {"Reporting region": "Reporting Region"})
+    df["Reporting Region"] = df["Reporting Region"].replace("Unknown", "Top End")  # [A4]
+
+    unmapped = set(df["Offence category"].dropna().unique()) - set(CATEGORY_MAP)
+    if unmapped:
+        raise ValueError(                                                # [A2]
+            f"Old-file offence categories missing from CATEGORY_MAP: {sorted(unmapped)}. "
+            f"Add them - otherwise those rows would silently become NaN."
+        )
+    df["Offence category"] = df["Offence category"].map(CATEGORY_MAP)
+    return df[KEEP_COLS].copy()
+
+
+def load_crime_new() -> pd.DataFrame:
+    """New file: already ANZSOC-aligned, so only the region fix is needed."""
+    df = _read_raw("crime_new")
+    df = rename_columns(df, {"Reporting region": "Reporting Region"})
+    df = df[df["Year"].between(YEAR_MIN, YEAR_MAX)].copy()
+    df["Reporting Region"] = df["Reporting Region"].replace("Unknown", "Top End")  # [A4]
+    return df[KEEP_COLS].copy()
+
+
+def remap_region(row) -> str:
+    """[A5] Harmonise police regions onto the 6 population regions."""
+    region = row["Reporting Region"]
+    sa2 = row["Statistical Area 2"]
+    if region == "NT Balance":
+        if pd.notna(sa2) and sa2 in SA2_TO_REGION:
+            return SA2_TO_REGION[sa2]
+        return "Top End"
+    return REGION_TO_POP.get(region, region)
 
 
 def process_crime() -> pd.DataFrame:
-    old = pd.read_csv(RAW_DIR / "crime_2020_2023.csv")
-    new = pd.read_csv(RAW_DIR / "crime_latest.csv")
+    """Merge both crime schemas into one region-harmonised offence table."""
+    old = load_crime_old()
+    new = load_crime_new()
+    print(f"[crime] old file (PROMIS)  : {len(old):,} rows | "
+          f"{old['Year'].min()}-{old['Year'].max()}")
+    print(f"[crime] new file (ANZSOC)  : {len(new):,} rows | "
+          f"{new['Year'].min()}-{new['Year'].max()}")
 
-    # standardise column names (new file has 'Offence type ' with a
-    # trailing space and 'Reporting Region' with a capital R)
-    old = rename_columns(old, {"Reporting region": "region"})
-    new = rename_columns(new, {"Offence type ": "Offence type", "Reporting Region": "region"})
+    crime = pd.concat([old, new], ignore_index=True)
+    crime["Quarter"] = (crime["Month number"] - 1) // 3 + 1
+    crime["Region"] = crime.apply(remap_region, axis=1)
+    crime = crime.drop(columns=["Reporting Region", "Statistical Area 2"])
 
-    old_assault = old[old["Offence type"].isin(ASSAULT_TYPES_OLD)].copy()
-    new_assault = new[new["Offence type"].isin(ASSAULT_TYPES_NEW)].copy()
-    new_assault = new_assault[new_assault["region"] != "Unknown"]
+    # [A8] flags -> offence counts. '-' means not applicable, treated as No.
+    for col, out in [("Alcohol involvement", "Alcohol_offences"),
+                     ("DV involvement", "DV_offences")]:
+        flag = crime[col].map({"Yes": 1, "No": 0, "-": 0}).fillna(0).astype(int)
+        crime[col] = flag
+        crime[out] = flag * crime["Number of offences"]
 
-    keep_cols = ["Year", "Month number", "region", "Alcohol involvement", "DV involvement", "Number of offences"]
-    combined = pd.concat([old_assault[keep_cols], new_assault[keep_cols]], ignore_index=True)
-    combined = rename_columns(combined, {"Year": "year", "Month number": "month", "Number of offences": "offences"})
-
-    # aggregate sub-rows (by Statistical Area 2 / alcohol / DV flags) up to
-    # one assault_count per region-year-month, while also keeping the
-    # alcohol/DV involvement proportions as separate engineered features
-    # (the problem statement calls out both as demand drivers)
-    total = combined.groupby(["region", "year", "month"], as_index=False)["offences"].sum()
-    total = rename_columns(total, {"offences": "assault_count"})
-
-    alcohol_yes = (
-        combined[combined["Alcohol involvement"] == "Yes"]
-        .groupby(["region", "year", "month"])["offences"].sum()
-    )
-    dv_yes = (
-        combined[combined["DV involvement"] == "Yes"]
-        .groupby(["region", "year", "month"])["offences"].sum()
-    )
-    total = total.set_index(["region", "year", "month"])
-    total["assault_alcohol_involved"] = alcohol_yes
-    total["assault_dv_involved"] = dv_yes
-    total = total.fillna({"assault_alcohol_involved": 0, "assault_dv_involved": 0}).reset_index()
-    total["pct_alcohol_involved"] = (total["assault_alcohol_involved"] / total["assault_count"]).round(3)
-    total["pct_dv_involved"] = (total["assault_dv_involved"] / total["assault_count"]).round(3)
-
-    # build a complete region x year x month grid so the Nov-2023 gap ([A2])
-    # and any other silent gaps show up as explicit NaN rows, not missing rows
-    all_regions = sorted(total["region"].unique())
-    full_index = pd.MultiIndex.from_product(
-        [
-            all_regions,
-            range(total["year"].min(), total["year"].max() + 1),
-            range(1, 13),
-        ],
-        names=["region", "year", "month"],
-    )
-    full = pd.DataFrame(index=full_index).reset_index()
-    full = full.merge(total, on=["region", "year", "month"], how="left")
-    # trim to the actual observed date range so we don't invent 13 extra
-    # months before the data starts / after it ends
-    full["date"] = pd.to_datetime(dict(year=full["year"], month=full["month"], day=1))
-    obs_min = pd.to_datetime(dict(year=[total["year"].min()], month=[total.loc[total["year"] == total["year"].min(), "month"].min()], day=[1])).iloc[0]
-    obs_max = pd.to_datetime(dict(year=[total["year"].max()], month=[total.loc[total["year"] == total["year"].max(), "month"].max()], day=[1])).iloc[0]
-    full = full[(full["date"] >= obs_min) & (full["date"] <= obs_max)].drop(columns="date")
-
-    # [A3] flag provisional months: the 6 most recent calendar months in the data
-    latest_year, latest_month = total["year"].max(), total.loc[total["year"] == total["year"].max(), "month"].max()
-    cutoff = pd.Period(year=latest_year, month=int(latest_month), freq="M") - 5
-    full["is_provisional"] = full.apply(
-        lambda r: pd.Period(year=int(r["year"]), month=int(r["month"]), freq="M") >= cutoff, axis=1
-    )
-
-    print(f"[crime] {len(full)} region-month rows | {full['assault_count'].isna().sum()} missing "
-          f"(expect 7, one per region, for the Nov-2023 gap)")
-    return full
-
-
-def process_alcohol() -> pd.DataFrame:
-    frames = []
-    for year in (2023, 2024, 2025):
-        df = pd.read_csv(RAW_DIR / f"alcohol_{year}.csv")
-        frames.append(df)
-    alcohol = pd.concat(frames, ignore_index=True)
-    alcohol["Quarter Ending"] = pd.to_datetime(alcohol["Quarter Ending"])
-    alcohol["year"] = alcohol["Quarter Ending"].dt.year
-    alcohol["quarter"] = alcohol["Quarter Ending"].dt.quarter
-    alcohol = rename_columns(alcohol, {"Region": "region", "Total PAC": "total_pac"})
-
-    # [A4] broadcast each quarterly value to its 3 months
-    rows = []
-    for _, r in alcohol.iterrows():
-        start_month = (r["quarter"] - 1) * 3 + 1
-        for m in range(start_month, start_month + 3):
-            rows.append({"region": r["region"], "year": r["year"], "month": m, "total_pac": r["total_pac"]})
-    monthly_alcohol = pd.DataFrame(rows)
-
-    print(f"[alcohol] {len(alcohol)} quarterly rows -> {len(monthly_alcohol)} monthly rows")
-    return monthly_alcohol
+    months = crime.groupby(["Year", "Month number"]).size().index
+    print(f"[crime] merged             : {len(crime):,} rows | "
+          f"{len(months)} distinct months | regions: {sorted(crime['Region'].unique())}")
+    if not ((crime["Year"] == 2023) & (crime["Month number"] == 11)).any():
+        print("[crime] [A3] November 2023 absent, as expected (systems transition gap)")
+    return crime
 
 
 def process_population() -> pd.DataFrame:
-    pop = pd.read_csv(RAW_DIR / "population.csv")
-    # one figure per population-region/year: sum across sex, age group,
-    # Aboriginal status. Prefer 'Final' status where more than one status
-    # exists for the same year (shouldn't happen, but be defensive)
-    status_priority = {"Final": 0, "Revised": 1, "Preliminary": 2}
-    pop["status_rank"] = pop["Status"].map(status_priority)
-    best_status = pop.groupby("Year")["status_rank"].transform("min")
-    pop = pop[pop["status_rank"] == best_status]
+    """One row per region-year with total, Aboriginal-status, sex and age-group
+    breakdowns."""
+    pop = _read_raw("population")
+    pop = pop[pop["Year"].between(YEAR_MIN, YEAR_MAX)].copy()
 
-    pop_totals = pop.groupby(["Region", "Year"], as_index=False)["Population"].sum()
-    pop_totals = rename_columns(pop_totals, {"Region": "pop_region", "Year": "year", "Population": "population"})
+    # One Status per year today, so summing can't mix Preliminary with Final.
+    # Checked rather than assumed: two statuses would double every region.
+    multi = pop.groupby("Year")["Status"].nunique()
+    if (multi > 1).any():
+        raise ValueError(
+            f"These years have more than one Status: {multi[multi > 1].index.tolist()}. "
+            f"Pick one (prefer Final) before summing, or population doubles."
+        )
+    pop = pop.drop(columns=["Status"], errors="ignore")
 
-    # [A5] map the 7 police regions onto the 6 population regions
-    crosswalk = pd.DataFrame(
-        [{"region": k, "pop_region": v} for k, v in REGION_CROSSWALK_POLICE_TO_POPULATION.items()]
-    )
-    mapped = crosswalk.merge(pop_totals, on="pop_region", how="left")
-    print(f"[population] {len(pop_totals)} population-region/year rows mapped to "
-          f"{mapped['region'].nunique()} police regions via the [A5] crosswalk")
-    return mapped[["region", "year", "population"]]
+    total = (pop.groupby(["Year", "Region"], as_index=False)["Population"].sum()
+             .rename(columns={"Population": "Total_population"}))
+
+    def wide(by: str) -> pd.DataFrame:
+        out = (pop.groupby(["Year", "Region", by])["Population"]
+               .sum().unstack(fill_value=0).reset_index())
+        out.columns.name = None
+        return out
+
+    by_status = wide("Aboriginal status")
+    by_sex = wide("Sex")
+    by_age = wide("Age Group")
+    by_age = rename_columns(by_age, {
+        c: "Pop_age_" + str(c).replace("-", "").replace("+", "plus")
+        for c in by_age.columns if c not in ("Year", "Region")
+    })
+
+    features = (total.merge(by_status, on=["Year", "Region"])
+                     .merge(by_sex, on=["Year", "Region"])
+                     .merge(by_age, on=["Year", "Region"]))
+    print(f"[population] {len(features)} region-year rows x {features.shape[1]} columns "
+          f"({features['Year'].min()}-{features['Year'].max()})")
+    return features
 
 
-def add_features(panel: pd.DataFrame) -> pd.DataFrame:
-    panel = panel.sort_values(["region", "year", "month"]).reset_index(drop=True)
+def process_alcohol() -> pd.DataFrame:
+    """Quarterly PAC by the 6 population regions, so PAC and population share
+    a denominator (Darwin + Palmerston are summed into Greater Darwin)."""
+    frames = [_read_raw(f"alcohol_{year}") for year in ALCOHOL_YEARS]
+    alc = pd.concat(frames, ignore_index=True)
 
-    # per-capita normalisation - the plan's stated reason for including
-    # population data at all ("standardise crime rates per 100,000 population")
-    panel["assault_rate_per_100k"] = (panel["assault_count"] / panel["population"] * 100_000).round(2)
+    alc["Quarter Ending"] = pd.to_datetime(alc["Quarter Ending"])
+    alc["Year"] = alc["Quarter Ending"].dt.year
+    alc["Quarter"] = alc["Quarter Ending"].dt.quarter                    # [A6]
+    alc = alc.drop(columns=["Quarter Ending"])
+    alc["Region"] = alc["Region"].map(REGION_TO_POP)
 
-    # cyclical month encoding - captures dry/wet season seasonality without
-    # treating December and January as 11 months apart
-    panel["month_sin"] = np.sin(2 * np.pi * panel["month"] / 12)
-    panel["month_cos"] = np.cos(2 * np.pi * panel["month"] / 12)
+    unmapped = alc["Region"].isna().sum()
+    if unmapped:
+        raise ValueError(f"{unmapped} alcohol rows have a region outside REGION_TO_POP.")
 
-    # lagged indicators, computed per region so region A's history never
-    # leaks into region B's lag features
-    for lag in (1, 2, 3, 12):
-        panel[f"assault_count_lag{lag}"] = panel.groupby("region")["assault_count"].shift(lag)
+    pac_cols = [c for c in alc.columns if c not in ("Region", "Year", "Quarter")]
+    alc = alc.groupby(["Year", "Quarter", "Region"], as_index=False)[pac_cols].sum()
+    print(f"[alcohol] {len(alc)} region-quarter rows | "
+          f"{alc['Year'].min()}-{alc['Year'].max()} | {len(pac_cols)} PAC columns")
+    return alc, pac_cols
 
-    panel["total_pac_lag1"] = panel.groupby("region")["total_pac"].shift(1)
 
+def build_panel() -> tuple:
+    """Crime + alcohol + population -> the offence-level analysis panel."""
+    banner("STAGE 2 - BUILD PANEL: dataset/raw/ -> dataset/processed/")
+    crime = process_crime()
+    population = process_population()
+    alcohol, pac_cols = process_alcohol()
+
+    panel = crime.merge(alcohol, on=["Year", "Quarter", "Region"], how="left")
+    panel = panel.merge(population, on=["Year", "Region"], how="left")
+    if panel["Total_population"].isna().any():
+        missing = (panel.loc[panel["Total_population"].isna(), ["Year", "Region"]]
+                   .drop_duplicates().to_dict("records"))
+        raise ValueError(f"No population figure for: {missing}")
+
+    pop_cols = (["Total_population", "Aboriginal", "Non-Aboriginal", "Male", "Female"]
+                + sorted(c for c in panel.columns if c.startswith("Pop_age_")))
+    group_cols = (["Year", "Quarter", "Month number", "Region",
+                   "Offence category", "Offence type",
+                   "Alcohol involvement", "DV involvement"]
+                  + pop_cols + pac_cols)
+    group_cols = [c for c in group_cols if c in panel.columns]
+    panel = (panel.groupby(group_cols, dropna=False, as_index=False)
+             [["Number of offences", "Alcohol_offences", "DV_offences"]].sum())
+    print(f"[panel] aggregated to {len(panel):,} rows x {panel.shape[1]} columns")
+
+    # [A7] impute inside 2023-2025 only; 2015-2022 stays NaN on purpose
+    recent = panel["Year"] >= min(ALCOHOL_YEARS)
+    for col in pac_cols:
+        quarter_mean = (panel.loc[recent]
+                        .groupby(["Region", "Quarter"])[col].transform("mean"))
+        panel.loc[recent, col] = panel.loc[recent, col].fillna(quarter_mean).round(0)
+    still_missing = panel.loc[recent, "Total PAC"].isna().sum()
+    print(f"[panel] PAC NaN inside {min(ALCOHOL_YEARS)}-{max(ALCOHOL_YEARS)} after "
+          f"imputation: {still_missing}")
+    print(f"[panel] PAC NaN before {min(ALCOHOL_YEARS)} (expected, [A7]): "
+          f"{panel.loc[~recent, 'Total PAC'].isna().sum():,}")
+
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = PROCESSED_DIR / "nt_crime_merged_2015_2025.csv"
+    write_csv(panel, out_path)
+    print(f"[panel] saved -> {out_path.relative_to(BASE_DIR)}")
+    print("\n[panel] rows by region x year:")
+    print(panel.groupby(["Region", "Year"]).size().unstack(fill_value=0).to_string())
+    return panel, population, pac_cols
+
+
+# =============================================================================
+# SECTION 3 - EDA
+# =============================================================================
+
+def _setup_plot_style() -> None:
+    sns.set_theme(style="whitegrid", palette="muted", font="DejaVu Sans")
+    plt.rcParams.update({
+        "figure.dpi": 150,
+        "axes.titlesize": 13,
+        "axes.titleweight": "bold",
+        "axes.labelsize": 11,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "legend.fontsize": 10,
+    })
+
+
+def _save(fig, name: str, folder: Path) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    fig.savefig(folder / name, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved: {name}")
+
+
+def _thousands(ax, axis: str = "y") -> None:
+    fmt = mticker.FuncFormatter(lambda x, _: f"{int(x):,}")
+    (ax.yaxis if axis == "y" else ax.xaxis).set_major_formatter(fmt)
+
+
+def run_eda(panel: pd.DataFrame) -> dict:
+    banner("STAGE 3 - EDA -> eda_plots/")
+    _setup_plot_style()
+    palette = sns.color_palette("tab10", n_colors=len(REGION_ORDER))
+    assault = panel[panel["Offence category"] == ASSAULT_CATEGORY].copy()
+
+    # --- 1.1 population trend ------------------------------------------------
+    pop_plot = panel.groupby(["Region", "Year"], as_index=False)["Total_population"].first()
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for region, color in zip(REGION_ORDER, palette):
+        grp = pop_plot[pop_plot["Region"] == region].sort_values("Year")
+        ax.plot(grp["Year"], grp["Total_population"] / 1000,
+                marker="o", linewidth=2, label=region, color=color)
+    ax.set(xlabel="Year", ylabel="Population (thousands)",
+           title=f"Population by NT Government Region ({YEAR_MIN}-{YEAR_MAX})")
+    ax.legend(title="Region", bbox_to_anchor=(1.01, 1), loc="upper left")
+    ax.xaxis.set_major_locator(mticker.MultipleLocator(1))
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    _save(fig, "1_1_population_trend_by_region.png", PLOT_DIR)
+
+    # --- 1.2 offences by year ------------------------------------------------
+    by_year = panel.groupby("Year", as_index=False)["Number of offences"].sum()
+    fig, ax = plt.subplots(figsize=(11, 5))
+    peak = by_year["Number of offences"].max()
+    bars = ax.bar(by_year["Year"].astype(str), by_year["Number of offences"],
+                  color=["#EF5350" if v == peak else "#42A5F5"
+                         for v in by_year["Number of offences"]], edgecolor="white")
+    ax.set(xlabel="Year", ylabel="Number of Offences",
+           title=f"Total Offences by Year - All Categories ({YEAR_MIN}-{YEAR_MAX})")
+    _thousands(ax)
+    for bar, val in zip(bars, by_year["Number of offences"]):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:,}",
+                ha="center", va="bottom", fontsize=8)
+    ax.set_ylim(0, peak * 1.12)
+    fig.tight_layout()
+    _save(fig, "1_2_offences_by_year.png", PLOT_DIR)
+
+    # --- 1.3 offences by category -------------------------------------------
+    cat_total = panel.groupby("Offence category")["Number of offences"].sum().sort_values()
+    labels = [c.split(" ", 1)[1] if " " in c else c for c in cat_total.index]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars = ax.barh(labels, cat_total.values,
+                   color=["#EF5350" if v == cat_total.max() else "#42A5F5"
+                          for v in cat_total], edgecolor="white")
+    ax.set(xlabel="Number of Offences",
+           title=f"Total Offences by Category ({YEAR_MIN}-{YEAR_MAX})")
+    _thousands(ax, "x")
+    ax.invert_yaxis()
+    for bar, val in zip(bars, cat_total.values):
+        ax.text(bar.get_width() + cat_total.max() * 0.01,
+                bar.get_y() + bar.get_height() / 2, f"{val:,}", va="center", fontsize=8)
+    fig.tight_layout()
+    _save(fig, "1_3_offences_by_category.png", PLOT_DIR)
+
+    # --- 1.4 alcohol / DV involvement, measured as offences [A8] -------------
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    total_offences = panel["Number of offences"].sum()
+    for ax, col, title, colors in zip(
+        axes, ["Alcohol_offences", "DV_offences"],
+        ["Alcohol Involvement", "DV Involvement"],
+        [["#EF5350", "#42A5F5"], ["#AB47BC", "#66BB6A"]],
+    ):
+        yes = panel[col].sum()
+        no = total_offences - yes
+        text = [f"Yes\n{yes:,}\n({yes / total_offences * 100:.1f}%)",
+                f"No / N/A\n{no:,}\n({no / total_offences * 100:.1f}%)"]
+        ax.bar(text, [yes, no], color=colors, edgecolor="white", width=0.5)
+        ax.set(title=title, ylabel="Number of Offences")
+        _thousands(ax)
+    fig.suptitle(f"Alcohol and DV Involvement Across All Offences ({YEAR_MIN}-{YEAR_MAX})",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, "1_4_alcohol_dv_involvement.png", PLOT_DIR)
+
+    # --- 2.1 crime rate per 100k by year ------------------------------------
+    pop_by_year = (panel.groupby(["Year", "Region"], as_index=False)["Total_population"]
+                   .first().groupby("Year")["Total_population"].sum())
+    by_year["Total_pop"] = by_year["Year"].map(pop_by_year)
+    by_year["Rate_per_100k"] = (by_year["Number of offences"]
+                                / by_year["Total_pop"] * 100_000).round(1)
+    fig, ax = plt.subplots(figsize=(11, 5))
+    top = by_year["Rate_per_100k"].max()
+    bars = ax.bar(by_year["Year"].astype(str), by_year["Rate_per_100k"],
+                  color=["#EF5350" if v == top else "#66BB6A"
+                         for v in by_year["Rate_per_100k"]], edgecolor="white")
+    ax.set(xlabel="Year", ylabel="Offences per 100,000 Population",
+           title=f"Annual Crime Rate per 100,000 Population ({YEAR_MIN}-{YEAR_MAX})")
+    for bar, val in zip(bars, by_year["Rate_per_100k"]):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.0f}",
+                ha="center", va="bottom", fontsize=8.5)
+    ax.set_ylim(0, top * 1.15)
+    fig.tight_layout()
+    _save(fig, "2_1_crime_rate_per_100k_by_year.png", PLOT_DIR)
+
+    # --- 2.2 offences by month ----------------------------------------------
+    monthly = panel.groupby("Month number", as_index=False)["Number of offences"].sum()
+    monthly["Month_label"] = monthly["Month number"].map(lambda m: MONTH_LABELS[m - 1])
+    fig, ax = plt.subplots(figsize=(10, 5))
+    top = monthly["Number of offences"].max()
+    bars = ax.bar(monthly["Month_label"], monthly["Number of offences"],
+                  color=["#EF5350" if v == top else "#42A5F5"
+                         for v in monthly["Number of offences"]], edgecolor="white")
+    ax.set(xlabel="Month", ylabel="Total Number of Offences",
+           title=f"Total Offences by Month - All Categories ({YEAR_MIN}-{YEAR_MAX} combined)")
+    _thousands(ax)
+    for bar, val in zip(bars, monthly["Number of offences"]):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:,}",
+                ha="center", va="bottom", fontsize=8.5)
+    ax.set_ylim(0, top * 1.12)
+    peak_month = monthly.loc[monthly["Number of offences"].idxmax(), "Month_label"]
+    fig.tight_layout()
+    _save(fig, "2_2_offences_by_month.png", PLOT_DIR)
+
+    # --- 2.3 assault trend by region ----------------------------------------
+    assault_yr = assault.groupby(["Year", "Region"], as_index=False)["Number of offences"].sum()
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for region, color in zip(REGION_ORDER, palette):
+        grp = assault_yr[assault_yr["Region"] == region].sort_values("Year")
+        ax.plot(grp["Year"], grp["Number of offences"],
+                marker="o", linewidth=2, label=region, color=color)
+    ax.set(xlabel="Year", ylabel="Assault Offences",
+           title=f"Annual Assault Offences by Region ({YEAR_MIN}-{YEAR_MAX})")
+    ax.legend(title="Region", bbox_to_anchor=(1.01, 1), loc="upper left")
+    ax.xaxis.set_major_locator(mticker.MultipleLocator(1))
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    _save(fig, "2_3_assault_trend_by_year_region.png", PLOT_DIR)
+
+    # --- 2.4 heatmap year x month -------------------------------------------
+    heat = (assault.groupby(["Year", "Month number"])["Number of offences"]
+            .sum().unstack())
+    heat.columns = [MONTH_LABELS[m - 1] for m in heat.columns]
+    fig, ax = plt.subplots(figsize=(14, 7))
+    sns.heatmap(heat, annot=True, fmt=",.0f", cmap="YlOrRd", linewidths=0.4, ax=ax,
+                cbar_kws={"label": "Assault Offences"})
+    ax.set(xlabel="Month", ylabel="Year",
+           title=f"Assault Offences Heatmap - Year x Month ({YEAR_MIN}-{YEAR_MAX})\n"
+                 f"blank = November 2023, the [A3] transition gap")
+    fig.tight_layout()
+    _save(fig, "2_4_heatmap_year_month_assault.png", PLOT_DIR)
+
+    # --- assault region-month aggregate for sections 3.x --------------------
+    monthly_assault = (assault.groupby(["Year", "Quarter", "Month number", "Region"])
+                       .agg(Assault_offences=("Number of offences", "sum"),
+                            Alcohol_offences=("Alcohol_offences", "sum"),
+                            DV_offences=("DV_offences", "sum"),
+                            Total_PAC=("Total PAC", "first"),
+                            Total_population=("Total_population", "first"),
+                            Aboriginal=("Aboriginal", "first"))
+                       .reset_index())
+    monthly_assault["Assault_rate_100k"] = (monthly_assault["Assault_offences"]
+                                            / monthly_assault["Total_population"]
+                                            * 100_000).round(1)
+    monthly_assault["alcohol_per_capita"] = (monthly_assault["Total_PAC"]
+                                             / monthly_assault["Total_population"])
+
+    # --- 3.1 assault rate by region -----------------------------------------
+    rate_yr = (monthly_assault.groupby(["Year", "Region"], as_index=False)
+               ["Assault_rate_100k"].mean().round(1))
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for region, color in zip(REGION_ORDER, palette):
+        grp = rate_yr[rate_yr["Region"] == region].sort_values("Year")
+        ax.plot(grp["Year"], grp["Assault_rate_100k"],
+                marker="o", linewidth=2, label=region, color=color)
+    ax.set(xlabel="Year", ylabel="Avg Monthly Assault Rate per 100,000",
+           title=f"Average Monthly Assault Rate per 100k by Region ({YEAR_MIN}-{YEAR_MAX})")
+    ax.legend(title="Region", bbox_to_anchor=(1.01, 1), loc="upper left")
+    ax.xaxis.set_major_locator(mticker.MultipleLocator(1))
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    _save(fig, "3_1_assault_rate_by_region_trend.png", PLOT_DIR)
+
+    # --- 3.2 distribution and log transform ---------------------------------
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    raw = monthly_assault["Assault_offences"]
+    logged = np.log1p(raw)
+    sns.histplot(raw, bins=30, kde=True, ax=axes[0], color="#42A5F5", edgecolor="white")
+    axes[0].set(xlabel="Assault Offences", ylabel="Frequency",
+                title=f"Distribution of Assault Offences\n(Skewness = {raw.skew():.2f})")
+    sns.histplot(logged, bins=30, kde=True, ax=axes[1], color="#66BB6A", edgecolor="white")
+    axes[1].set(xlabel="log(1 + Assault Offences)", ylabel="Frequency",
+                title=f"Log-Transformed\n(Skewness = {logged.skew():.2f})")
+    fig.suptitle("Assault Offences Distribution: Original vs Log Transform",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, "3_2_assault_distribution.png", PLOT_DIR)
+
+    # --- 3.3 alcohol / DV share of assault by year [A8] ---------------------
+    shares = (monthly_assault.groupby("Year")
+              .agg(Assault=("Assault_offences", "sum"),
+                   Alcohol=("Alcohol_offences", "sum"),
+                   DV=("DV_offences", "sum")).reset_index())
+    shares["Pct_alcohol"] = shares["Alcohol"] / shares["Assault"] * 100
+    shares["Pct_dv"] = shares["DV"] / shares["Assault"] * 100
+    fig, ax = plt.subplots(figsize=(11, 5))
+    x = np.arange(len(shares))
+    width = 0.35
+    b1 = ax.bar(x - width / 2, shares["Pct_alcohol"], width, color="#EF5350",
+                edgecolor="white", label="Alcohol-involved (%)")
+    b2 = ax.bar(x + width / 2, shares["Pct_dv"], width, color="#AB47BC",
+                edgecolor="white", label="DV-involved (%)")
+    ax.set_xticks(x, shares["Year"].astype(str))
+    ax.set(xlabel="Year", ylabel="% of Assault Offences",
+           title=f"Alcohol and DV Involvement in Assault Offences by Year "
+                 f"({YEAR_MIN}-{YEAR_MAX})")
+    ax.legend()
+    for bar, val in zip(list(b1) + list(b2),
+                        list(shares["Pct_alcohol"]) + list(shares["Pct_dv"])):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.0f}%",
+                ha="center", va="bottom", fontsize=7.5)
+    ax.set_ylim(0, max(shares["Pct_alcohol"].max(), shares["Pct_dv"].max()) * 1.25)
+    fig.tight_layout()
+    _save(fig, "3_3_alc_dv_involvement_by_year.png", PLOT_DIR)
+
+    # --- 3.4 PAC trend ------------------------------------------------------
+    pac = (monthly_assault[monthly_assault["Total_PAC"].notna()]
+           .groupby(["Year", "Quarter", "Region"], as_index=False)["Total_PAC"].first())
+    if not pac.empty:
+        pac["YQ"] = pac["Year"].astype(str) + "-Q" + pac["Quarter"].astype(str)
+        fig, ax = plt.subplots(figsize=(12, 6))
+        for region, color in zip(REGION_ORDER, palette):
+            grp = pac[pac["Region"] == region].sort_values(["Year", "Quarter"])
+            if not grp.empty:
+                ax.plot(grp["YQ"], grp["Total_PAC"] / 1000,
+                        marker="o", linewidth=2, label=region, color=color)
+        ax.set(xlabel="Year-Quarter", ylabel="Total PAC (thousands of litres)",
+               title=f"Wholesale Alcohol Supply (PAC) by Region and Quarter "
+                     f"({min(ALCOHOL_YEARS)}-{max(ALCOHOL_YEARS)})")
+        ax.legend(title="Region", bbox_to_anchor=(1.01, 1), loc="upper left")
+        ax.tick_params(axis="x", rotation=30)
+        fig.tight_layout()
+        _save(fig, "3_4_pac_trend_by_region.png", PLOT_DIR)
+
+    # --- 3.5 correlations ---------------------------------------------------
+    with_pac = monthly_assault[monthly_assault["Total_PAC"].notna()].copy()
+    corr_frame = with_pac[["Assault_rate_100k", "alcohol_per_capita", "Total_population",
+                           "Aboriginal", "Alcohol_offences", "DV_offences"]]
+    corr_frame = rename_columns(corr_frame, {
+        "Assault_rate_100k": "Assault Rate /100k",
+        "alcohol_per_capita": "PAC per Capita",
+        "Total_population": "Total Population",
+        "Aboriginal": "Aboriginal Pop.",
+        "Alcohol_offences": "Alcohol-Involved Offences",
+        "DV_offences": "DV-Involved Offences",
+    })
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(corr_frame.corr(), annot=True, fmt=".2f", cmap="coolwarm", center=0,
+                vmin=-1, vmax=1, linewidths=0.5, ax=ax,
+                cbar_kws={"label": "Pearson Correlation"})
+    ax.set_title(f"Correlation Heatmap - Assault Predictors\n"
+                 f"({min(ALCOHOL_YEARS)}-{max(ALCOHOL_YEARS)}, per-capita to remove region size)")
+    fig.tight_layout()
+    _save(fig, "3_5_correlation_heatmap.png", PLOT_DIR)
+
+    # Pooling all regions makes any pair of population-scaled series look
+    # correlated, so report the within-region correlation as well.
+    pooled_r = with_pac["alcohol_per_capita"].corr(with_pac["Assault_rate_100k"])
+    within = (with_pac.groupby("Region")
+              .apply(lambda g: g["alcohol_per_capita"].corr(g["Assault_rate_100k"]))
+              .round(3))
+
+    print()
+    print("EDA summary")
+    print(f"  peak crime month                        : {peak_month}")
+    print(f"  highest average assault rate region     : "
+          f"{rate_yr.groupby('Region')['Assault_rate_100k'].mean().idxmax()}")
+    print(f"  assault skewness raw / log              : "
+          f"{raw.skew():.2f} / {logged.skew():.2f}")
+    print(f"  PAC per capita vs assault rate (pooled) : {pooled_r:.3f}")
+    print("  same correlation computed within region :")
+    for region, value in within.items():
+        print(f"      {region:<20} r = {value:+.3f}")
+    return {"monthly_assault": monthly_assault, "palette": palette}
+
+
+# =============================================================================
+# SECTION 4 - PCA
+# =============================================================================
+
+def run_pca(population: pd.DataFrame) -> None:
+    banner("STAGE 4 - PCA on regional age structure")
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
+
+    age_cols = sorted(c for c in population.columns if c.startswith("Pop_age_"))
+    # [A14] shares, not counts.
+    shares = population[age_cols].div(population["Total_population"], axis=0)
+    scaled = StandardScaler().fit_transform(shares.astype(float).values)
+    pca = PCA().fit(scaled)
+    explained = pca.explained_variance_ratio_ * 100
+    cumulative = np.cumsum(explained)
+
+    print(f"  matrix: {scaled.shape[0]} region-year rows x {scaled.shape[1]} age groups")
+    print(f"  {'PC':<6}{'Explained %':>14}{'Cumulative %':>15}")
+    print("  " + "-" * 35)
+    for i in range(min(6, scaled.shape[1])):
+        print(f"  PC{i + 1:<4}{explained[i]:>14.1f}{cumulative[i]:>15.1f}")
+    n_90 = int(np.searchsorted(cumulative, 90) + 1)
+    print(f"  components needed for 90% of variance: {n_90}")
+
+
+# =============================================================================
+# SECTION 5 - REGRESSION
+# =============================================================================
+
+FEATURE_VARIANTS_BASE = ["sin_month", "cos_month", "Season",
+                         "assault_rate_lag1", "assault_rate_lag3", "assault_rate_lag12"]
+
+
+def build_regression_panel(monthly_assault: pd.DataFrame,
+                           population: pd.DataFrame) -> pd.DataFrame:
+    """Region x month grid with lag features - see [A10] for why the grid."""
+    observed = monthly_assault.copy()
+    observed["date"] = pd.to_datetime(
+        dict(year=observed["Year"], month=observed["Month number"], day=1))
+
+    grid = pd.MultiIndex.from_product(
+        [sorted(observed["Region"].unique()),
+         pd.date_range(observed["date"].min(), observed["date"].max(), freq="MS")],
+        names=["Region", "date"],
+    ).to_frame(index=False)
+    panel = grid.merge(
+        observed.drop(columns=["Year", "Quarter", "Month number", "Total_population"]),
+        on=["Region", "date"], how="left")
+
+    panel["Year"] = panel["date"].dt.year
+    panel["Month number"] = panel["date"].dt.month
+    panel["Quarter"] = panel["date"].dt.quarter
+    panel = panel.merge(population[["Year", "Region", "Total_population"]],
+                        on=["Year", "Region"], how="left")
+
+    gap = panel["Assault_offences"].isna().sum()
+    print(f"[regression] grid: {len(panel)} region-month rows, {gap} with no crime data "
+          f"({gap // max(1, panel['Region'].nunique())} month(s) x "
+          f"{panel['Region'].nunique()} regions - the [A3] gap)")
+
+    panel = panel.sort_values(["Region", "date"]).reset_index(drop=True)
+    panel["log_assault_rate"] = np.log1p(panel["Assault_rate_100k"])
+    panel["sin_month"] = np.sin(2 * np.pi * panel["Month number"] / 12)
+    panel["cos_month"] = np.cos(2 * np.pi * panel["Month number"] / 12)
+    panel["Season"] = panel["Month number"].isin([11, 12, 1, 2, 3, 4]).astype(int)  # 1=Wet
+
+    for lag in (1, 3, 12):
+        panel[f"assault_rate_lag{lag}"] = (panel.groupby("Region")["Assault_rate_100k"]
+                                           .shift(lag))
+
+    # [A9] flag the most recent 6 months rather than dropping them
+    last = panel.loc[panel["Assault_offences"].notna(), "date"].max()
+    panel["is_provisional"] = panel["date"] > (last - pd.DateOffset(months=6))
+
+    dummies = pd.get_dummies(panel["Region"], prefix="Reg")
+    dummies = dummies.drop(columns=["Reg_Greater Darwin"], errors="ignore")
+    panel = pd.concat([panel, dummies], axis=1)
+
+    required = ["log_assault_rate"] + [f"assault_rate_lag{l}" for l in (1, 3, 12)]
+    before = len(panel)
+    panel = panel.dropna(subset=required).reset_index(drop=True)
+    print(f"[regression] usable rows after lag warm-up and gap removal: "
+          f"{len(panel)} (dropped {before - len(panel)})")
+    print(f"[regression] provisional rows flagged ([A9]): {panel['is_provisional'].sum()}")
     return panel
 
 
-def processing_main():
-    print(f"[data_processing] reading cleaned files from: {RAW_DIR}")
-    missing = [f"{n}.csv" for n in
-               ("crime_2020_2023", "crime_latest", "population", "alcohol_2023", "alcohol_2024", "alcohol_2025")
-               if not (RAW_DIR / f"{n}.csv").exists()]
-    if missing:
-        raise FileNotFoundError(
-            f"Missing {missing} in {RAW_DIR} - run ingest.py first, it creates these."
-        )
+def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
+                   palette) -> None:
+    banner("STAGE 5 - REGRESSION -> regression_plots/")
+    from scipy import stats
+    from sklearn.linear_model import Lasso, LinearRegression, Ridge
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+    from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+    from sklearn.preprocessing import StandardScaler
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    panel = build_regression_panel(monthly_assault, population)
+    dummy_cols = [c for c in panel.columns if c.startswith("Reg_")]
 
-    crime = process_crime()
-    alcohol = process_alcohol()
-    population = process_population()
+    train = panel[panel["Year"] <= 2022]
+    test = panel[panel["Year"] >= 2023]
+    y_train = train["log_assault_rate"].to_numpy(float)
+    y_test = test["log_assault_rate"].to_numpy(float)
+    print(f"[A11] train {YEAR_MIN}-2022: {len(train)} rows | "
+          f"test 2023-{YEAR_MAX}: {len(test)} rows")
 
-    panel = crime.merge(alcohol, on=["region", "year", "month"], how="left")
-    panel = panel.merge(population, on=["region", "year"], how="left")
-    panel = add_features(panel)
+    # [A13] TimeSeriesSplit needs rows in calendar order, not region order.
+    cv_frame = panel.sort_values(["date", "Region"]).reset_index(drop=True)
+    y_cv = cv_frame["log_assault_rate"].to_numpy(float)
+    tscv = TimeSeriesSplit(n_splits=5)
 
-    out_path = PROCESSED_DIR / "nt_assault_panel.csv"
-    try:
-        panel.to_csv(out_path, index=False)
-    except PermissionError as e:
-        raise PermissionError(
-            f"Cannot write to {out_path} - Windows says the file is in use. "
-            f"This almost always means it's currently open in Excel (or another "
-            f"program) on your computer. Close that file and run this script again."
-        ) from e
-    print(f"\n[data_processing] final panel: {panel.shape[0]} rows x {panel.shape[1]} columns -> {out_path}")
-    print(f"[data_processing] regions: {sorted(panel['region'].unique())}")
-    print(f"[data_processing] date range: {panel['year'].min()}-{panel[panel['year']==panel['year'].min()]['month'].min():02d}"
-          f" to {panel['year'].max()}-{panel[panel['year']==panel['year'].max()]['month'].max():02d}")
-    print(f"[data_processing] rows missing population (check [A5] crosswalk): {panel['population'].isna().sum()}")
-    print(f"[data_processing] rows missing alcohol PAC (expected before 2023): {panel['total_pac'].isna().sum()}")
+    def cv_rmse(model, features) -> float:
+        X = StandardScaler().fit_transform(cv_frame[features].astype(float))
+        scores = cross_val_score(model, X, y_cv, cv=tscv,
+                                 scoring="neg_root_mean_squared_error")
+        return float(-scores.mean())
+
+    # --- R1 feature variants ------------------------------------------------
+    print("\n-- R1: feature variant comparison (Linear Regression) --")
+    variants = {
+        "V1: Temporal": FEATURE_VARIANTS_BASE,
+        "V2: + Region": FEATURE_VARIANTS_BASE + dummy_cols,
+        "V3: + Crime ctx": FEATURE_VARIANTS_BASE + ["Alcohol_offences", "DV_offences"],
+        "V4: Full (no PAC)": (FEATURE_VARIANTS_BASE
+                              + ["Alcohol_offences", "DV_offences"] + dummy_cols),
+    }
+    variant_rmse = {}
+    for name, features in variants.items():
+        scaler = StandardScaler()
+        x_tr = scaler.fit_transform(train[features].astype(float))
+        x_te = scaler.transform(test[features].astype(float))
+        pred = LinearRegression().fit(x_tr, y_train).predict(x_te)
+        variant_rmse[name] = float(np.sqrt(mean_squared_error(y_test, pred)))
+        print(f"   {name:<20} RMSE={variant_rmse[name]:.4f} "
+              f"MAE={mean_absolute_error(y_test, pred):.4f}")
+
+    best_variant = min(variant_rmse, key=variant_rmse.get)
+    FEATURES = variants[best_variant]
+    print(f"   -> best variant: {best_variant} (RMSE={variant_rmse[best_variant]:.4f})")
+
+    fig, ax = plt.subplots(figsize=(9, 4))
+    values = list(variant_rmse.values())
+    bars = ax.bar(list(variant_rmse), values, width=0.5, edgecolor="white",
+                  color=["#EF5350" if v == min(values) else "#90CAF9" for v in values])
+    for bar, val in zip(bars, values):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.4f}",
+                ha="center", va="bottom", fontsize=10, fontweight="bold")
+    ax.set(xlabel="Feature Variant", ylabel="RMSE (log scale)", ylim=(0, max(values) * 1.15),
+           title="Feature Variant Comparison - Linear Regression\n"
+                 f"(train {YEAR_MIN}-2022, test 2023-{YEAR_MAX} | red = best)")
+    fig.tight_layout()
+    _save(fig, "R1_feature_variants.png", REG_PLOT_DIR)
+
+    # --- R2 VIF -------------------------------------------------------------
+    print("\n-- R2: VIF (multicollinearity) --")
+    vif_matrix = train[FEATURES].astype(float).to_numpy()
+    vif = pd.DataFrame({
+        "Feature": FEATURES,
+        "VIF": [variance_inflation_factor(vif_matrix, i) for i in range(len(FEATURES))],
+    }).sort_values("VIF", ascending=False)
+    for _, row in vif.iterrows():
+        verdict = ("high - expected for lags" if row["VIF"] > 50
+                   else "elevated - monitor" if row["VIF"] > 10 else "acceptable")
+        print(f"   {row['Feature']:<26}{row['VIF']:>8.1f}  {verdict}")
+
+    # --- R3 alpha tuning ----------------------------------------------------
+    print("\n-- R3: alpha tuning (TimeSeriesSplit over calendar order, [A13]) --")
+    alphas = [0.01, 0.1, 1, 10, 100]
+    ridge_cv, lasso_cv = {}, {}
+    print(f"   {'alpha':<8}{'Ridge CV RMSE':<18}{'Lasso CV RMSE'}")
+    for alpha in alphas:
+        ridge_cv[alpha] = cv_rmse(Ridge(alpha=alpha), FEATURES)
+        lasso_cv[alpha] = cv_rmse(Lasso(alpha=alpha, max_iter=10000), FEATURES)
+        print(f"   {alpha:<8}{ridge_cv[alpha]:<18.4f}{lasso_cv[alpha]:.4f}")
+    best_ridge = min(ridge_cv, key=ridge_cv.get)
+    best_lasso = min(lasso_cv, key=lasso_cv.get)
+    print(f"   -> Ridge alpha={best_ridge} (CV RMSE={ridge_cv[best_ridge]:.4f})")
+    print(f"   -> Lasso alpha={best_lasso} (CV RMSE={lasso_cv[best_lasso]:.4f})")
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    for ax, scores, name, color in zip(axes, [ridge_cv, lasso_cv],
+                                       ["Ridge", "Lasso"], ["#2196F3", "#FF9800"]):
+        best = min(scores, key=scores.get)
+        ax.plot(range(len(alphas)), list(scores.values()), marker="o", linewidth=2,
+                color=color)
+        ax.scatter([alphas.index(best)], [scores[best]], color="#EF5350", s=120,
+                   zorder=5, label=f"best alpha={best}")
+        ax.set_xticks(range(len(alphas)), [str(a) for a in alphas])
+        ax.set(xlabel="Alpha", ylabel="CV RMSE (log scale)",
+               title=f"{name} - Alpha Tuning\n(TimeSeriesSplit, 5 folds)")
+        ax.legend()
+    fig.suptitle("Hyperparameter Tuning", fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, "R2_alpha_tuning.png", REG_PLOT_DIR)
+
+    # --- R4 final models ----------------------------------------------------
+    print("\n-- R4: Model A (no alcohol supply) --")
+    scaler = StandardScaler()
+    x_train = scaler.fit_transform(train[FEATURES].astype(float))
+    x_test = scaler.transform(test[FEATURES].astype(float))
+    models = {
+        "Linear Regression": LinearRegression(),
+        f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
+        f"Lasso (a={best_lasso})": Lasso(alpha=best_lasso, max_iter=10000),
+    }
+    results = {}
+    print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)':<14}{'CV RMSE'}")
+    for name, model in models.items():
+        model.fit(x_train, y_train)
+        pred = model.predict(x_test)
+        results[name] = {
+            "model": model,
+            "pred": pred,
+            "rmse": float(np.sqrt(mean_squared_error(y_test, pred))),
+            "mae": float(mean_absolute_error(y_test, pred)),
+            "rmse_rate": float(np.sqrt(mean_squared_error(np.expm1(y_test),
+                                                          np.expm1(pred)))),
+            "cv": cv_rmse(model.__class__(**model.get_params()), FEATURES),
+        }
+        r = results[name]
+        print(f"   {name:<22}{r['rmse']:<12.4f}{r['mae']:<12.4f}"
+              f"{r['rmse_rate']:<14.1f}{r['cv']:.4f}")
+
+    best_name = min(results, key=lambda k: results[k]["cv"])
+    print(f"   -> best by CV RMSE: {best_name}")
+
+    labels = ["LR", f"Ridge\na={best_ridge}", f"Lasso\na={best_lasso}"]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    for ax, values, title, color in zip(
+        axes,
+        [[r["rmse"] for r in results.values()], [r["cv"] for r in results.values()]],
+        ["Test RMSE (log scale)", "CV RMSE (TimeSeriesSplit, 5 folds)"],
+        ["#42A5F5", "#66BB6A"],
+    ):
+        best_idx = values.index(min(values))
+        bars = ax.bar(labels, values, width=0.5, edgecolor="white",
+                      color=["#EF5350" if i == best_idx else color
+                             for i in range(len(values))])
+        for bar, val in zip(bars, values):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.4f}",
+                    ha="center", va="bottom", fontsize=10)
+        ax.set(ylabel="RMSE", title=f"{title}\n(red = best)", ylim=(0, max(values) * 1.2))
+    fig.suptitle("Model Comparison - Model A (No Alcohol Supply)",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, "R3_model_comparison.png", REG_PLOT_DIR)
+
+    # --- R5 assumption checks -----------------------------------------------
+    print("\n-- R5: assumption checks (Linear Regression) --")
+    resid = y_test - results["Linear Regression"]["pred"]
+    sw_stat, sw_p = stats.shapiro(resid)
+    verdict = ("fail to reject H0 (approx. normal)" if sw_p > 0.05
+               else "reject H0 (residuals not normal)")
+    print(f"   Shapiro-Wilk W={sw_stat:.4f} p={sw_p:.4f} -> {verdict}")
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].scatter(results["Linear Regression"]["pred"], resid, alpha=0.6,
+                    color="#2196F3", edgecolors="white", s=60)
+    axes[0].axhline(0, color="red", linewidth=1.5, linestyle="--")
+    axes[0].set(xlabel="Fitted Values (log scale)", ylabel="Residuals",
+                title="Residuals vs Fitted\n(random scatter = homoscedastic)")
+    stats.probplot(resid, dist="norm", plot=axes[1])
+    axes[1].set_title("Q-Q Plot of Residuals\n(points on line = normal)")
+    axes[1].get_lines()[0].set(color="#2196F3", markersize=5)
+    axes[1].get_lines()[1].set(color="red", linewidth=1.5)
+    fig.suptitle("Linear Regression Assumption Checks", fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, "R4_assumption_checks.png", REG_PLOT_DIR)
+
+    # --- R6 predicted vs actual ---------------------------------------------
+    actual_rate = np.expm1(y_test)
+    pred_rate = np.expm1(results[best_name]["pred"])
+    fig, ax = plt.subplots(figsize=(8, 6))
+    for region, color in zip(REGION_ORDER, palette):
+        mask = (test["Region"] == region).to_numpy()
+        ax.scatter(actual_rate[mask], pred_rate[mask], label=region, color=color,
+                   alpha=0.75, s=60, edgecolors="white")
+    limit = max(actual_rate.max(), pred_rate.max()) * 1.05
+    ax.plot([0, limit], [0, limit], "r--", linewidth=1.5, label="Perfect prediction")
+    ax.set(xlabel="Actual Assault Rate (per 100k)",
+           ylabel="Predicted Assault Rate (per 100k)",
+           title=f"Predicted vs Actual - {best_name}\n"
+                 f"RMSE = {results[best_name]['rmse_rate']:.1f} per 100k "
+                 f"(2023-{YEAR_MAX} test)")
+    ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left")
+    fig.tight_layout()
+    _save(fig, "R5_predicted_vs_actual.png", REG_PLOT_DIR)
+
+    # --- R7 paired t-tests --------------------------------------------------
+    print("\n-- R7: paired t-tests on absolute error (alpha = 0.05) --")
+    names = list(results)
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            a, b = names[i], names[j]
+            t, p = stats.ttest_rel(np.abs(y_test - results[a]["pred"]),
+                                   np.abs(y_test - results[b]["pred"]))
+            decision = "reject H0 (significant)" if p < 0.05 else "fail to reject H0"
+            print(f"   {a:<22} vs {b:<22} t={t:+.4f} p={p:.4f}  {decision}")
+
+    # --- R8 coefficients ----------------------------------------------------
+    print("\n-- R8: coefficients --")
+    coefs = pd.DataFrame({
+        "Feature": FEATURES,
+        "Ridge": results[f"Ridge (a={best_ridge})"]["model"].coef_,
+        "Lasso": results[f"Lasso (a={best_lasso})"]["model"].coef_,
+    }).sort_values("Ridge", key=abs, ascending=False)
+    for _, row in coefs.iterrows():
+        state = "ZEROED" if abs(row["Lasso"]) < 1e-6 else "kept"
+        print(f"   {row['Feature']:<26} Ridge={row['Ridge']:+.4f} "
+              f"Lasso={row['Lasso']:+.4f} [{state}]")
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    for ax, column, title, color in zip(
+        axes, ["Ridge", "Lasso"],
+        [f"Ridge (alpha={best_ridge})", f"Lasso (alpha={best_lasso})"],
+        ["#2196F3", "#FF9800"],
+    ):
+        values = coefs[column].to_numpy()
+        ax.barh(coefs["Feature"], values, edgecolor="white",
+                color=["#EF5350" if v < 0 else color for v in values])
+        ax.axvline(0, color="black", linewidth=0.8)
+        ax.set(xlabel="Standardised Coefficient", title=title)
+    fig.suptitle("Feature Coefficients: Ridge vs Lasso", fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, "R6_coefficients.png", REG_PLOT_DIR)
+
+    # --- R9 per-region predictions ------------------------------------------
+    print(f"\n-- R9: per-region accuracy on the 2023-{YEAR_MAX} test set --")
+    preds = test[["Year", "Month number", "Region"]].reset_index(drop=True)
+    preds["Actual_rate"] = actual_rate.round(1)
+    preds["Predicted_rate"] = pred_rate.round(1)
+    preds["Error"] = (preds["Predicted_rate"] - preds["Actual_rate"]).round(1)
+
+    print(f"   {'Region':<20}{'Avg actual':>12}{'Avg predicted':>15}{'RMSE':>9}{'Mean err%':>11}")
+    for region in REGION_ORDER:
+        sub = preds[preds["Region"] == region]
+        if sub.empty:
+            continue
+        print(f"   {region:<20}{sub['Actual_rate'].mean():>12.1f}"
+              f"{sub['Predicted_rate'].mean():>15.1f}"
+              f"{np.sqrt((sub['Error'] ** 2).mean()):>9.1f}"
+              f"{(sub['Error'] / sub['Actual_rate'] * 100).mean():>10.1f}%")
+    overall_rmse = float(np.sqrt(mean_squared_error(actual_rate, pred_rate)))
+    overall_mae = float(mean_absolute_error(actual_rate, pred_rate))
+    print(f"   overall RMSE = {overall_rmse:.1f} per 100k | MAE = {overall_mae:.1f} per 100k")
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
+    for ax, region, color in zip(axes.flatten(), REGION_ORDER, palette):
+        sub = preds[preds["Region"] == region].sort_values(["Year", "Month number"])
+        ticks = (sub["Year"].astype(str).str[-2:] + "-"
+                 + sub["Month number"].map(lambda m: MONTH_LABELS[m - 1]))
+        ax.plot(range(len(sub)), sub["Actual_rate"], marker="o", linewidth=2,
+                label="Actual", color=color, alpha=0.9)
+        ax.plot(range(len(sub)), sub["Predicted_rate"], marker="s", linewidth=2,
+                linestyle="--", label="Predicted", color=color, alpha=0.6)
+        ax.fill_between(range(len(sub)), sub["Actual_rate"], sub["Predicted_rate"],
+                        alpha=0.12, color=color)
+        ax.set_title(f"{region}\nRMSE = {np.sqrt((sub['Error'] ** 2).mean()):.0f} per 100k",
+                     fontsize=10, fontweight="bold")
+        ax.set(xlabel=f"Month (2023-{YEAR_MAX})", ylabel="Assault Rate (per 100k)")
+        step = max(1, len(sub) // 8)
+        ax.set_xticks(range(0, len(sub), step),
+                      ticks.iloc[::step].tolist(), rotation=45, fontsize=7)
+        ax.legend(fontsize=8)
+    fig.suptitle(f"{best_name}: Predicted vs Actual Assault Rate by Region "
+                 f"(2023-{YEAR_MAX} test)\nOverall RMSE = {overall_rmse:.1f} | "
+                 f"MAE = {overall_mae:.1f} per 100k", fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, "R7_predictions_by_region.png", REG_PLOT_DIR)
+
+    # --- R10 Model B --------------------------------------------------------
+    print(f"\n-- R10: Model B - with alcohol supply "
+          f"(train {min(ALCOHOL_YEARS)}-2024, test {YEAR_MAX}) [A12] --")
+    panel_b = panel[(panel["Year"] >= min(ALCOHOL_YEARS)) & panel["Total_PAC"].notna()].copy()
+    panel_b["alcohol_per_capita"] = panel_b["Total_PAC"] / panel_b["Total_population"]
+    features_b = FEATURES + ["alcohol_per_capita"]
+
+    train_b = panel_b[panel_b["Year"] <= 2024]
+    test_b = panel_b[panel_b["Year"] == YEAR_MAX]
+    if len(train_b) <= 5 or test_b.empty:
+        print("   insufficient data for Model B.")
+        return
+
+    y_train_b = train_b["log_assault_rate"].to_numpy(float)
+    y_test_b = test_b["log_assault_rate"].to_numpy(float)
+    scaler_b = StandardScaler()
+    x_train_b = scaler_b.fit_transform(train_b[features_b].astype(float))
+    x_test_b = scaler_b.transform(test_b[features_b].astype(float))
+    print(f"   train {len(train_b)} rows | test {len(test_b)} rows")
+    print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)'}")
+    results_b = {}
+    for name, model in {
+        "Linear Regression": LinearRegression(),
+        f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
+        f"Lasso (a={best_lasso})": Lasso(alpha=best_lasso, max_iter=10000),
+    }.items():
+        model.fit(x_train_b, y_train_b)
+        pred = model.predict(x_test_b)
+        results_b[name] = {
+            "rmse": float(np.sqrt(mean_squared_error(y_test_b, pred))),
+            "mae": float(mean_absolute_error(y_test_b, pred)),
+            "rmse_rate": float(np.sqrt(mean_squared_error(np.expm1(y_test_b),
+                                                          np.expm1(pred)))),
+            "coef": dict(zip(features_b, model.coef_)),
+        }
+        r = results_b[name]
+        print(f"   {name:<22}{r['rmse']:<12.4f}{r['mae']:<12.4f}{r['rmse_rate']:.1f}")
+
+    apc = {n: r["coef"]["alcohol_per_capita"] for n, r in results_b.items()}
+    print("   standardised alcohol_per_capita coefficient:")
+    for name, value in apc.items():
+        print(f"      {name:<22}{value:+.4f}")
+    print(f"\n   [A12] Model A best RMSE(log) = {results[best_name]['rmse']:.4f} "
+          f"(train {YEAR_MIN}-2022)")
+    print(f"         Model B best RMSE(log) = "
+          f"{min(r['rmse'] for r in results_b.values()):.4f} "
+          f"(train {min(ALCOHOL_YEARS)}-2024)")
+    print("         Different training windows - not directly comparable.")
 
 
 # =============================================================================
-# ENTRY POINT - run ingest, then processing, same order as the two scripts
+# ENTRY POINT
 # =============================================================================
+
+def main() -> None:
+    ingest_main()
+    panel, population, _ = build_panel()
+    eda = run_eda(panel)
+    run_pca(population)
+    run_regression(eda["monthly_assault"], population, eda["palette"])
+
+    banner("PIPELINE COMPLETE")
+    print(f"  dataset/raw/         ingested copies + manifest.json")
+    print(f"  dataset/processed/   nt_crime_merged_2015_2025.csv")
+    print(f"  eda_plots/           {len(list(PLOT_DIR.glob('*.png')))} figures")
+    print(f"  regression_plots/    {len(list(REG_PLOT_DIR.glob('*.png')))} figures")
+
 
 if __name__ == "__main__":
-    ingest_main()
-    print()
-    processing_main()
+    main()
