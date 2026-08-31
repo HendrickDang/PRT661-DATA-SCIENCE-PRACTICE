@@ -12,9 +12,6 @@ Ingest is the only stage that touches the raw downloads, so portal renames and
 Excel sheet names stay in one place. A missing source file stops the run before
 any analysis happens.
 
-Run:
-    python "Ingest&Process pipeline.py"
-
 ---------------------------------------------------------------------------
 ASSUMPTION LOG - the non-obvious decisions, referenced as [A#] in the code.
 ---------------------------------------------------------------------------
@@ -82,8 +79,7 @@ def write_csv(df: pd.DataFrame, out_path: Path) -> None:
     except PermissionError as e:
         raise PermissionError(
             f"Cannot write to {out_path} - Windows says the file is in use. "
-            f"This almost always means it's currently open in Excel (or another "
-            f"program) on your computer. Close that file and run this script again."
+            f"This almost always means it's currently open in Excel (or another program) on your computer. Close that file and run this script again."
         ) from e
 
 
