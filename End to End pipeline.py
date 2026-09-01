@@ -63,6 +63,17 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from scipy import stats
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from sklearn.preprocessing import StandardScaler
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
 BASE_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = BASE_DIR / "dataset" / "source"
 RAW_DIR = BASE_DIR / "dataset" / "raw"
@@ -896,39 +907,47 @@ def build_regression_panel(monthly_assault: pd.DataFrame,
     return panel
 
 
-def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
-                   palette) -> None:
-    banner("STAGE 5 - REGRESSION -> regression_plots/")
-    from scipy import stats
-    from sklearn.linear_model import Lasso, LinearRegression, Ridge
-    from sklearn.metrics import mean_absolute_error, mean_squared_error
-    from sklearn.model_selection import TimeSeriesSplit, cross_val_score
-    from sklearn.preprocessing import StandardScaler
-    from statsmodels.stats.outliers_influence import variance_inflation_factor
+def cv_rmse_for_features(model, cv_frame: pd.DataFrame, features: list[str]) -> float:
+    """TimeSeriesSplit CV RMSE over calendar order for given model + feature set."""
+    y_cv = cv_frame["log_assault_rate"].to_numpy(float)
+    tscv = TimeSeriesSplit(n_splits=5)
+    X = StandardScaler().fit_transform(cv_frame[features].astype(float))
+    scores = cross_val_score(
+        model,
+        X,
+        y_cv,
+        cv=tscv,
+        scoring="neg_root_mean_squared_error",
+    )
+    return float(-scores.mean())
+# ---------- STAGE 0: data prep ----------------------------------------------
 
+def prepare_panel(monthly_assault: pd.DataFrame,
+                  population: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame,
+                                                     pd.DataFrame, list[str],
+                                                     pd.DataFrame]:
     panel = build_regression_panel(monthly_assault, population)
     dummy_cols = [c for c in panel.columns if c.startswith("Reg_")]
 
     train = panel[panel["Year"] <= 2022]
     test = panel[panel["Year"] >= 2023]
-    y_train = train["log_assault_rate"].to_numpy(float)
-    y_test = test["log_assault_rate"].to_numpy(float)
+
     print(f"[A11] train {YEAR_MIN}-2022: {len(train)} rows | "
           f"test 2023-{YEAR_MAX}: {len(test)} rows")
 
-    # [A13] TimeSeriesSplit needs rows in calendar order, not region order.
+    # TimeSeriesSplit needs rows in calendar order, not region order.
     cv_frame = panel.sort_values(["date", "Region"]).reset_index(drop=True)
-    y_cv = cv_frame["log_assault_rate"].to_numpy(float)
-    tscv = TimeSeriesSplit(n_splits=5)
 
-    def cv_rmse(model, features) -> float:
-        X = StandardScaler().fit_transform(cv_frame[features].astype(float))
-        scores = cross_val_score(model, X, y_cv, cv=tscv,
-                                 scoring="neg_root_mean_squared_error")
-        return float(-scores.mean())
+    return panel, train, test, dummy_cols, cv_frame
 
-    # --- R1 feature variants ------------------------------------------------
+
+# ---------- R1: feature variant comparison ----------------------------------
+
+def evaluate_feature_variants(train: pd.DataFrame,
+                              test: pd.DataFrame,
+                              dummy_cols: list[str]) -> list[str]:
     print("\n-- R1: feature variant comparison (Linear Regression) --")
+
     variants = {
         "V1: Temporal": FEATURE_VARIANTS_BASE,
         "V2: + Region": FEATURE_VARIANTS_BASE + dummy_cols,
@@ -936,102 +955,177 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
         "V4: Full (no PAC)": (FEATURE_VARIANTS_BASE
                               + ["Alcohol_offences", "DV_offences"] + dummy_cols),
     }
-    variant_rmse = {}
+
+    y_train = train["log_assault_rate"].to_numpy(float)
+    y_test = test["log_assault_rate"].to_numpy(float)
+
+    variant_rmse: dict[str, float] = {}
+
     for name, features in variants.items():
         scaler = StandardScaler()
         x_tr = scaler.fit_transform(train[features].astype(float))
         x_te = scaler.transform(test[features].astype(float))
         pred = LinearRegression().fit(x_tr, y_train).predict(x_te)
-        variant_rmse[name] = float(np.sqrt(mean_squared_error(y_test, pred)))
-        print(f"   {name:<20} RMSE={variant_rmse[name]:.4f} "
-              f"MAE={mean_absolute_error(y_test, pred):.4f}")
+        rmse = float(np.sqrt(mean_squared_error(y_test, pred)))
+        mae = float(mean_absolute_error(y_test, pred))
+        variant_rmse[name] = rmse
+        print(f"   {name:<20} RMSE={rmse:.4f} MAE={mae:.4f}")
 
     best_variant = min(variant_rmse, key=variant_rmse.get)
     FEATURES = variants[best_variant]
     print(f"   -> best variant: {best_variant} (RMSE={variant_rmse[best_variant]:.4f})")
 
+    # plot
     fig, ax = plt.subplots(figsize=(9, 4))
     values = list(variant_rmse.values())
-    bars = ax.bar(list(variant_rmse), values, width=0.5, edgecolor="white",
-                  color=["#EF5350" if v == min(values) else "#90CAF9" for v in values])
+    bars = ax.bar(
+        list(variant_rmse),
+        values,
+        width=0.5,
+        edgecolor="white",
+        color=["#EF5350" if v == min(values) else "#90CAF9" for v in values],
+    )
     for bar, val in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.4f}",
                 ha="center", va="bottom", fontsize=10, fontweight="bold")
-    ax.set(xlabel="Feature Variant", ylabel="RMSE (log scale)", ylim=(0, max(values) * 1.15),
-           title="Feature Variant Comparison - Linear Regression\n"
-                 f"(train {YEAR_MIN}-2022, test 2023-{YEAR_MAX} | red = best)")
+    ax.set(
+        xlabel="Feature Variant",
+        ylabel="RMSE (log scale)",
+        ylim=(0, max(values) * 1.15),
+        title=("Feature Variant Comparison - Linear Regression\n"
+               f"(train {YEAR_MIN}-2022, test 2023-{YEAR_MAX} | red = best)"),
+    )
     fig.tight_layout()
     _save(fig, "R1_feature_variants.png", REG_PLOT_DIR)
 
-    # --- R2 VIF -------------------------------------------------------------
+    return FEATURES
+
+
+# ---------- R2: VIF ---------------------------------------------------------
+
+def compute_vif_and_filter(train: pd.DataFrame,
+                           FEATURES: list[str]) -> list[str]:
     print("\n-- R2: VIF (multicollinearity) --")
+
     vif_matrix = train[FEATURES].astype(float).to_numpy()
     vif = pd.DataFrame({
         "Feature": FEATURES,
-        "VIF": [variance_inflation_factor(vif_matrix, i) for i in range(len(FEATURES))],
+        "VIF": [variance_inflation_factor(vif_matrix, i)
+                for i in range(len(FEATURES))],
     }).sort_values("VIF", ascending=False)
+
+    to_remove = vif.loc[vif["VIF"] > 30, "Feature"].tolist()
+
     for _, row in vif.iterrows():
-        verdict = ("high - expected for lags" if row["VIF"] > 50
-                   else "elevated - monitor" if row["VIF"] > 10 else "acceptable")
+        verdict = (
+            "remove" if row["VIF"] > 30
+            else "elevated - monitor" if row["VIF"] > 10
+            else "acceptable"
+        )
         print(f"   {row['Feature']:<26}{row['VIF']:>8.1f}  {verdict}")
 
-    # --- R3 alpha tuning ----------------------------------------------------
+    if to_remove:
+        print("\nRemoving due to VIF > 30:", to_remove)
+        FEATURES = [f for f in FEATURES if f not in to_remove]
+    else:
+        print("\nNo features removed (all VIF ≤ 30).")
+
+    return FEATURES
+
+
+# ---------- R3: alpha tuning ------------------------------------------------
+
+def tune_alphas(cv_frame: pd.DataFrame,
+                FEATURES: list[str]) -> tuple[float, float]:
     print("\n-- R3: alpha tuning (TimeSeriesSplit over calendar order, [A13]) --")
     alphas = [0.01, 0.1, 1, 10, 100]
-    ridge_cv, lasso_cv = {}, {}
+    ridge_cv: dict[float, float] = {}
+    lasso_cv: dict[float, float] = {}
+
     print(f"   {'alpha':<8}{'Ridge CV RMSE':<18}{'Lasso CV RMSE'}")
     for alpha in alphas:
-        ridge_cv[alpha] = cv_rmse(Ridge(alpha=alpha), FEATURES)
-        lasso_cv[alpha] = cv_rmse(Lasso(alpha=alpha, max_iter=10000), FEATURES)
+        ridge_cv[alpha] = cv_rmse_for_features(Ridge(alpha=alpha), cv_frame, FEATURES)
+        lasso_cv[alpha] = cv_rmse_for_features(
+            Lasso(alpha=alpha, max_iter=10000), cv_frame, FEATURES
+        )
         print(f"   {alpha:<8}{ridge_cv[alpha]:<18.4f}{lasso_cv[alpha]:.4f}")
+
     best_ridge = min(ridge_cv, key=ridge_cv.get)
     best_lasso = min(lasso_cv, key=lasso_cv.get)
     print(f"   -> Ridge alpha={best_ridge} (CV RMSE={ridge_cv[best_ridge]:.4f})")
     print(f"   -> Lasso alpha={best_lasso} (CV RMSE={lasso_cv[best_lasso]:.4f})")
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-    for ax, scores, name, color in zip(axes, [ridge_cv, lasso_cv],
-                                       ["Ridge", "Lasso"], ["#2196F3", "#FF9800"]):
+    for ax, scores, name, color in zip(
+        axes,
+        [ridge_cv, lasso_cv],
+        ["Ridge", "Lasso"],
+        ["#2196F3", "#FF9800"],
+    ):
         best = min(scores, key=scores.get)
         ax.plot(range(len(alphas)), list(scores.values()), marker="o", linewidth=2,
                 color=color)
         ax.scatter([alphas.index(best)], [scores[best]], color="#EF5350", s=120,
                    zorder=5, label=f"best alpha={best}")
         ax.set_xticks(range(len(alphas)), [str(a) for a in alphas])
-        ax.set(xlabel="Alpha", ylabel="CV RMSE (log scale)",
-               title=f"{name} - Alpha Tuning\n(TimeSeriesSplit, 5 folds)")
+        ax.set(
+            xlabel="Alpha",
+            ylabel="CV RMSE (log scale)",
+            title=f"{name} - Alpha Tuning\n(TimeSeriesSplit, 5 folds)",
+        )
         ax.legend()
     fig.suptitle("Hyperparameter Tuning", fontsize=13, fontweight="bold")
     fig.tight_layout()
     _save(fig, "R2_alpha_tuning.png", REG_PLOT_DIR)
 
-    # --- R4 final models ----------------------------------------------------
+    return best_ridge, best_lasso
+
+
+# ---------- R4: final models ------------------------------------------------
+
+def train_final_models(train: pd.DataFrame,
+                       test: pd.DataFrame,
+                       FEATURES: list[str],
+                       best_ridge: float,
+                       best_lasso: float,
+                       cv_frame: pd.DataFrame) -> tuple[dict, str]:
     print("\n-- R4: Model A (no alcohol supply) --")
+
+    y_train = train["log_assault_rate"].to_numpy(float)
+    y_test = test["log_assault_rate"].to_numpy(float)
+
     scaler = StandardScaler()
     x_train = scaler.fit_transform(train[FEATURES].astype(float))
     x_test = scaler.transform(test[FEATURES].astype(float))
+
     models = {
         "Linear Regression": LinearRegression(),
         f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
         f"Lasso (a={best_lasso})": Lasso(alpha=best_lasso, max_iter=10000),
     }
-    results = {}
+
+    results: dict[str, dict] = {}
     print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)':<14}{'CV RMSE'}")
     for name, model in models.items():
         model.fit(x_train, y_train)
         pred = model.predict(x_test)
+        rmse_log = float(np.sqrt(mean_squared_error(y_test, pred)))
+        mae_log = float(mean_absolute_error(y_test, pred))
+        rmse_rate = float(np.sqrt(mean_squared_error(np.expm1(y_test),
+                                                     np.expm1(pred))))
+        cv = cv_rmse_for_features(model.__class__(**model.get_params()),
+                                  cv_frame, FEATURES)
+
         results[name] = {
             "model": model,
             "pred": pred,
-            "rmse": float(np.sqrt(mean_squared_error(y_test, pred))),
-            "mae": float(mean_absolute_error(y_test, pred)),
-            "rmse_rate": float(np.sqrt(mean_squared_error(np.expm1(y_test),
-                                                          np.expm1(pred)))),
-            "cv": cv_rmse(model.__class__(**model.get_params()), FEATURES),
+            "rmse": rmse_log,
+            "mae": mae_log,
+            "rmse_rate": rmse_rate,
+            "cv": cv,
         }
-        r = results[name]
-        print(f"   {name:<22}{r['rmse']:<12.4f}{r['mae']:<12.4f}"
-              f"{r['rmse_rate']:<14.1f}{r['cv']:.4f}")
+        print(f"   {name:<22}{rmse_log:<12.4f}{mae_log:<12.4f}"
+              f"{rmse_rate:<14.1f}{cv:.4f}")
 
     best_name = min(results, key=lambda k: results[k]["cv"])
     print(f"   -> best by CV RMSE: {best_name}")
@@ -1040,7 +1134,8 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     for ax, values, title, color in zip(
         axes,
-        [[r["rmse"] for r in results.values()], [r["cv"] for r in results.values()]],
+        [[r["rmse"] for r in results.values()],
+         [r["cv"] for r in results.values()]],
         ["Test RMSE (log scale)", "CV RMSE (TimeSeriesSplit, 5 folds)"],
         ["#42A5F5", "#66BB6A"],
     ):
@@ -1051,13 +1146,20 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
         for bar, val in zip(bars, values):
             ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.4f}",
                     ha="center", va="bottom", fontsize=10)
-        ax.set(ylabel="RMSE", title=f"{title}\n(red = best)", ylim=(0, max(values) * 1.2))
+        ax.set(ylabel="RMSE", title=f"{title}\n(red = best)",
+               ylim=(0, max(values) * 1.2))
     fig.suptitle("Model Comparison - Model A (No Alcohol Supply)",
                  fontsize=13, fontweight="bold")
     fig.tight_layout()
     _save(fig, "R3_model_comparison.png", REG_PLOT_DIR)
 
-    # --- R5 assumption checks -----------------------------------------------
+    return results, best_name
+
+
+# ---------- R5: assumption checks -------------------------------------------
+
+def check_assumptions(results: dict,
+                      y_test: np.ndarray) -> None:
     print("\n-- R5: assumption checks (Linear Regression) --")
     resid = y_test - results["Linear Regression"]["pred"]
     sw_stat, sw_p = stats.shapiro(resid)
@@ -1079,9 +1181,16 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
     fig.tight_layout()
     _save(fig, "R4_assumption_checks.png", REG_PLOT_DIR)
 
-    # --- R6 predicted vs actual ---------------------------------------------
-    actual_rate = np.expm1(y_test)
+
+# ---------- R6: predicted vs actual -----------------------------------------
+
+def plot_predicted_vs_actual(test: pd.DataFrame,
+                             results: dict,
+                             best_name: str,
+                             palette) -> None:
+    actual_rate = np.expm1(test["log_assault_rate"].to_numpy(float))
     pred_rate = np.expm1(results[best_name]["pred"])
+
     fig, ax = plt.subplots(figsize=(8, 6))
     for region, color in zip(REGION_ORDER, palette):
         mask = (test["Region"] == region).to_numpy()
@@ -1091,14 +1200,18 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
     ax.plot([0, limit], [0, limit], "r--", linewidth=1.5, label="Perfect prediction")
     ax.set(xlabel="Actual Assault Rate (per 100k)",
            ylabel="Predicted Assault Rate (per 100k)",
-           title=f"Predicted vs Actual - {best_name}\n"
-                 f"RMSE = {results[best_name]['rmse_rate']:.1f} per 100k "
-                 f"(2023-{YEAR_MAX} test)")
+           title=(f"Predicted vs Actual - {best_name}\n"
+                  f"RMSE = {results[best_name]['rmse_rate']:.1f} per 100k "
+                  f"(2023-{YEAR_MAX} test)"))
     ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left")
     fig.tight_layout()
     _save(fig, "R5_predicted_vs_actual.png", REG_PLOT_DIR)
 
-    # --- R7 paired t-tests --------------------------------------------------
+
+# ---------- R7: paired t-tests ----------------------------------------------
+
+def paired_t_tests(results: dict,
+                   y_test: np.ndarray) -> None:
     print("\n-- R7: paired t-tests on absolute error (alpha = 0.05) --")
     names = list(results)
     for i in range(len(names)):
@@ -1106,16 +1219,24 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
             a, b = names[i], names[j]
             t, p = stats.ttest_rel(np.abs(y_test - results[a]["pred"]),
                                    np.abs(y_test - results[b]["pred"]))
+
             decision = "reject H0 (significant)" if p < 0.05 else "fail to reject H0"
             print(f"   {a:<22} vs {b:<22} t={t:+.4f} p={p:.4f}  {decision}")
 
-    # --- R8 coefficients ----------------------------------------------------
+
+# ---------- R8: coefficients -------------------------------------------------
+
+def plot_coefficients(results: dict,
+                      FEATURES: list[str],
+                      best_ridge: float,
+                      best_lasso: float) -> None:
     print("\n-- R8: coefficients --")
     coefs = pd.DataFrame({
         "Feature": FEATURES,
         "Ridge": results[f"Ridge (a={best_ridge})"]["model"].coef_,
         "Lasso": results[f"Lasso (a={best_lasso})"]["model"].coef_,
     }).sort_values("Ridge", key=abs, ascending=False)
+
     for _, row in coefs.iterrows():
         state = "ZEROED" if abs(row["Lasso"]) < 1e-6 else "kept"
         print(f"   {row['Feature']:<26} Ridge={row['Ridge']:+.4f} "
@@ -1123,7 +1244,8 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     for ax, column, title, color in zip(
-        axes, ["Ridge", "Lasso"],
+        axes,
+        ["Ridge", "Lasso"],
         [f"Ridge (alpha={best_ridge})", f"Lasso (alpha={best_lasso})"],
         ["#2196F3", "#FF9800"],
     ):
@@ -1136,8 +1258,18 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
     fig.tight_layout()
     _save(fig, "R6_coefficients.png", REG_PLOT_DIR)
 
-    # --- R9 per-region predictions ------------------------------------------
+
+# ---------- R9: per-region predictions --------------------------------------
+
+def per_region_predictions(test: pd.DataFrame,
+                           results: dict,
+                           best_name: str,
+                           palette) -> None:
     print(f"\n-- R9: per-region accuracy on the 2023-{YEAR_MAX} test set --")
+
+    actual_rate = np.expm1(test["log_assault_rate"].to_numpy(float))
+    pred_rate = np.expm1(results[best_name]["pred"])
+
     preds = test[["Year", "Month number", "Region"]].reset_index(drop=True)
     preds["Actual_rate"] = actual_rate.round(1)
     preds["Predicted_rate"] = pred_rate.round(1)
@@ -1152,6 +1284,7 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
               f"{sub['Predicted_rate'].mean():>15.1f}"
               f"{np.sqrt((sub['Error'] ** 2).mean()):>9.1f}"
               f"{(sub['Error'] / sub['Actual_rate'] * 100).mean():>10.1f}%")
+
     overall_rmse = float(np.sqrt(mean_squared_error(actual_rate, pred_rate)))
     overall_mae = float(mean_absolute_error(actual_rate, pred_rate))
     print(f"   overall RMSE = {overall_rmse:.1f} per 100k | MAE = {overall_mae:.1f} per 100k")
@@ -1180,9 +1313,16 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
     fig.tight_layout()
     _save(fig, "R7_predictions_by_region.png", REG_PLOT_DIR)
 
-    # --- R10 Model B --------------------------------------------------------
+
+# ---------- R10: Model B with alcohol supply --------------------------------
+
+def model_b_with_alcohol(panel: pd.DataFrame,
+                         FEATURES: list[str],
+                         best_ridge: float,
+                         best_lasso: float) -> None:
     print(f"\n-- R10: Model B - with alcohol supply "
           f"(train {min(ALCOHOL_YEARS)}-2024, test {YEAR_MAX}) [A12] --")
+
     panel_b = panel[(panel["Year"] >= min(ALCOHOL_YEARS)) & panel["Total_PAC"].notna()].copy()
     panel_b["alcohol_per_capita"] = panel_b["Total_PAC"] / panel_b["Total_population"]
     features_b = FEATURES + ["alcohol_per_capita"]
@@ -1200,7 +1340,8 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
     x_test_b = scaler_b.transform(test_b[features_b].astype(float))
     print(f"   train {len(train_b)} rows | test {len(test_b)} rows")
     print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)'}")
-    results_b = {}
+
+    results_b: dict[str, dict] = {}
     for name, model in {
         "Linear Regression": LinearRegression(),
         f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
@@ -1208,27 +1349,50 @@ def run_regression(monthly_assault: pd.DataFrame, population: pd.DataFrame,
     }.items():
         model.fit(x_train_b, y_train_b)
         pred = model.predict(x_test_b)
+        rmse = float(np.sqrt(mean_squared_error(y_test_b, pred)))
+        mae = float(mean_absolute_error(y_test_b, pred))
+        rmse_rate = float(np.sqrt(mean_squared_error(np.expm1(y_test_b),
+                                                     np.expm1(pred))))
         results_b[name] = {
-            "rmse": float(np.sqrt(mean_squared_error(y_test_b, pred))),
-            "mae": float(mean_absolute_error(y_test_b, pred)),
-            "rmse_rate": float(np.sqrt(mean_squared_error(np.expm1(y_test_b),
-                                                          np.expm1(pred)))),
+            "rmse": rmse,
+            "mae": mae,
+            "rmse_rate": rmse_rate,
             "coef": dict(zip(features_b, model.coef_)),
         }
-        r = results_b[name]
-        print(f"   {name:<22}{r['rmse']:<12.4f}{r['mae']:<12.4f}{r['rmse_rate']:.1f}")
+        print(f"   {name:<22}{rmse:<12.4f}{mae:<12.4f}{rmse_rate:.1f}")
 
     apc = {n: r["coef"]["alcohol_per_capita"] for n, r in results_b.items()}
     print("   standardised alcohol_per_capita coefficient:")
     for name, value in apc.items():
         print(f"      {name:<22}{value:+.4f}")
-    print(f"\n   [A12] Model A best RMSE(log) = {results[best_name]['rmse']:.4f} "
-          f"(train {YEAR_MIN}-2022)")
-    print(f"         Model B best RMSE(log) = "
-          f"{min(r['rmse'] for r in results_b.values()):.4f} "
-          f"(train {min(ALCOHOL_YEARS)}-2024)")
-    print("         Different training windows - not directly comparable.")
 
+
+# ---------- orchestrator ----------------------------------------------------
+
+def run_regression(monthly_assault: pd.DataFrame,
+                   population: pd.DataFrame,
+                   palette) -> None:
+    banner("STAGE 5 - REGRESSION -> regression_plots/")
+
+    panel, train, test, dummy_cols, cv_frame = prepare_panel(monthly_assault, population)
+
+    FEATURES = evaluate_feature_variants(train, test, dummy_cols)
+    FEATURES = compute_vif_and_filter(train, FEATURES)
+
+    best_ridge, best_lasso = tune_alphas(cv_frame, FEATURES)
+
+    results, best_name = train_final_models(train, test, FEATURES,
+                                            best_ridge, best_lasso, cv_frame)
+
+    y_test = test["log_assault_rate"].to_numpy(float)
+
+    check_assumptions(results, y_test)
+    plot_predicted_vs_actual(test, results, best_name, palette)
+    paired_t_tests(results, y_test)
+    plot_coefficients(results, FEATURES, best_ridge, best_lasso)
+    per_region_predictions(test, results, best_name, palette)
+
+    model_b_with_alcohol(panel, FEATURES, best_ridge, best_lasso)
 
 # =============================================================================
 # ENTRY POINT
