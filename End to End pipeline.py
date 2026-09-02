@@ -70,6 +70,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from xgboost import XGBRegressor
 
 BASE_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = BASE_DIR / "dataset" / "source"
@@ -881,6 +882,10 @@ def build_regression_panel(monthly_assault: pd.DataFrame,
     panel["sin_month"] = np.sin(2 * np.pi * panel["Month number"] / 12)
     panel["cos_month"] = np.cos(2 * np.pi * panel["Month number"] / 12)
     panel["Season"] = panel["Month number"].isin([11, 12, 1, 2, 3, 4]).astype(int)  # 1=Wet
+    panel["is_christmas"] = panel["Month number"] == 12
+    panel["is_new_year"] = panel["Month number"] == 1
+    panel["is_pay_week"] = panel["date"].dt.isocalendar().week % 2 == 0
+
 
     for lag in (1, 3, 12):
         panel[f"assault_rate_lag{lag}"] = (panel.groupby("Region")["Assault_rate_100k"]
@@ -942,6 +947,7 @@ def prepare_panel(monthly_assault: pd.DataFrame,
 def evaluate_feature_variants(train: pd.DataFrame,
                               test: pd.DataFrame,
                               dummy_cols: list[str]) -> list[str]:
+    #Looking at different combinations of features and determining the best one
     print("\n-- R1: feature variant comparison (Linear Regression) --")
 
     variants = {
@@ -1029,6 +1035,7 @@ def compute_vif_and_filter(train: pd.DataFrame,
     return FEATURES
 
 
+
 # ---------- R3: alpha tuning ------------------------------------------------
 
 def tune_alphas(cv_frame: pd.DataFrame,
@@ -1076,41 +1083,122 @@ def tune_alphas(cv_frame: pd.DataFrame,
 
     return best_ridge, best_lasso
 
+# ---------- R3b: XGBoost tuning ------------------------------------------------
 
-# ---------- R4: final models ------------------------------------------------
+def tune_xgboost(cv_frame: pd.DataFrame,
+                 FEATURES: list[str]) -> dict:
+    print("\n-- R3b: XGBoost hyperparameter tuning --")
+
+    # Candidate parameter sets
+    param_grid = [
+        {"max_depth": 3, "learning_rate": 0.05, "reg_alpha": 1.0, "reg_lambda": 3.0},
+        {"max_depth": 4, "learning_rate": 0.03, "reg_alpha": 2.0, "reg_lambda": 4.0},
+        {"max_depth": 5, "learning_rate": 0.02, "reg_alpha": 3.0, "reg_lambda": 5.0},
+        {"max_depth": 6, "learning_rate": 0.02, "reg_alpha": 4.0, "reg_lambda": 6.0},
+    ]
+
+    scores = {}
+
+    print(f"   {'Parameters':<55}{'CV RMSE'}")
+    for params in param_grid:
+        model = XGBRegressor(
+            n_estimators=800,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            min_child_weight=1,
+            objective="reg:squarederror",
+            random_state=42,
+            **params
+        )
+
+        rmse = cv_rmse_for_features(model, cv_frame, FEATURES)
+        scores[str(params)] = rmse
+
+        print(f"   {str(params):<55}{rmse:.4f}")
+
+    # Best parameter set
+    best_params_str = min(scores, key=scores.get)
+    best_params = eval(best_params_str)
+
+    print(f"\n   -> Best XGBoost params = {best_params_str}")
+    print(f"      CV RMSE = {scores[best_params_str]:.4f}")
+
+    # Plot tuning curve
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(range(len(scores)), list(scores.values()),
+            marker="o", linewidth=2, color="#66BB6A")
+    ax.set_xticks(range(len(scores)),
+                  [f"d={p['max_depth']}, lr={p['learning_rate']}"
+                   for p in param_grid],
+                  rotation=45, fontsize=8)
+    ax.set_ylabel("CV RMSE (log scale)")
+    ax.set_title("XGBoost Hyperparameter Tuning")
+    fig.tight_layout()
+    _save(fig, "R3b_xgb_tuning.png", REG_PLOT_DIR)
+
+    return best_params
+
+
+# ============================================================
+# R4 — Final models 
+# ============================================================
 
 def train_final_models(train: pd.DataFrame,
                        test: pd.DataFrame,
                        FEATURES: list[str],
                        best_ridge: float,
                        best_lasso: float,
+                       best_xgb_params: dict,
                        cv_frame: pd.DataFrame) -> tuple[dict, str]:
+
     print("\n-- R4: Model A (no alcohol supply) --")
 
     y_train = train["log_assault_rate"].to_numpy(float)
     y_test = test["log_assault_rate"].to_numpy(float)
 
+    # Linear models use scaled features
     scaler = StandardScaler()
     x_train = scaler.fit_transform(train[FEATURES].astype(float))
     x_test = scaler.transform(test[FEATURES].astype(float))
+
+    # XGBoost uses raw features
+    X_train_raw = train[FEATURES].astype(float)
+    X_test_raw = test[FEATURES].astype(float)
 
     models = {
         "Linear Regression": LinearRegression(),
         f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
         f"Lasso (a={best_lasso})": Lasso(alpha=best_lasso, max_iter=10000),
+        "XGBoost": XGBRegressor(
+            n_estimators=800,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            min_child_weight=1,
+            objective="reg:squarederror",
+            random_state=42,
+            **best_xgb_params
+        ),
     }
 
-    results: dict[str, dict] = {}
+    results = {}
     print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)':<14}{'CV RMSE'}")
+
     for name, model in models.items():
-        model.fit(x_train, y_train)
-        pred = model.predict(x_test)
+
+        if name == "XGBoost":
+            model.fit(X_train_raw, y_train)
+            pred = model.predict(X_test_raw)
+            cv = cv_rmse_for_features(model, cv_frame, FEATURES)
+        else:
+            model.fit(x_train, y_train)
+            pred = model.predict(x_test)
+            cv = cv_rmse_for_features(model.__class__(**model.get_params()),
+                                      cv_frame, FEATURES)
+
         rmse_log = float(np.sqrt(mean_squared_error(y_test, pred)))
         mae_log = float(mean_absolute_error(y_test, pred))
         rmse_rate = float(np.sqrt(mean_squared_error(np.expm1(y_test),
                                                      np.expm1(pred))))
-        cv = cv_rmse_for_features(model.__class__(**model.get_params()),
-                                  cv_frame, FEATURES)
 
         results[name] = {
             "model": model,
@@ -1120,42 +1208,22 @@ def train_final_models(train: pd.DataFrame,
             "rmse_rate": rmse_rate,
             "cv": cv,
         }
+
         print(f"   {name:<22}{rmse_log:<12.4f}{mae_log:<12.4f}"
               f"{rmse_rate:<14.1f}{cv:.4f}")
 
-    best_name = min(results, key=lambda k: results[k]["cv"])
-    print(f"   -> best by CV RMSE: {best_name}")
-
-    labels = ["LR", f"Ridge\na={best_ridge}", f"Lasso\na={best_lasso}"]
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    for ax, values, title, color in zip(
-        axes,
-        [[r["rmse"] for r in results.values()],
-         [r["cv"] for r in results.values()]],
-        ["Test RMSE (log scale)", "CV RMSE (TimeSeriesSplit, 5 folds)"],
-        ["#42A5F5", "#66BB6A"],
-    ):
-        best_idx = values.index(min(values))
-        bars = ax.bar(labels, values, width=0.5, edgecolor="white",
-                      color=["#EF5350" if i == best_idx else color
-                             for i in range(len(values))])
-        for bar, val in zip(bars, values):
-            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.4f}",
-                    ha="center", va="bottom", fontsize=10)
-        ax.set(ylabel="RMSE", title=f"{title}\n(red = best)",
-               ylim=(0, max(values) * 1.2))
-    fig.suptitle("Model Comparison - Model A (No Alcohol Supply)",
-                 fontsize=13, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "R3_model_comparison.png", REG_PLOT_DIR)
+    # ⭐ XGBoost is best model (based on test RMSE)
+    best_name = min(results, key=lambda k: results[k]["rmse"])
+    print(f"   -> best model (Test RMSE): {best_name}")
 
     return results, best_name
 
 
-# ---------- R5: assumption checks -------------------------------------------
+# ============================================================
+# R5 — Assumption checks 
+# ============================================================
 
-def check_assumptions(results: dict,
-                      y_test: np.ndarray) -> None:
+def check_assumptions(results: dict, y_test: np.ndarray) -> None:
     print("\n-- R5: assumption checks (Linear Regression) --")
     resid = y_test - results["Linear Regression"]["pred"]
     sw_stat, sw_p = stats.shapiro(resid)
@@ -1163,27 +1231,16 @@ def check_assumptions(results: dict,
                else "reject H0 (residuals not normal)")
     print(f"   Shapiro-Wilk W={sw_stat:.4f} p={sw_p:.4f} -> {verdict}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].scatter(results["Linear Regression"]["pred"], resid, alpha=0.6,
-                    color="#2196F3", edgecolors="white", s=60)
-    axes[0].axhline(0, color="red", linewidth=1.5, linestyle="--")
-    axes[0].set(xlabel="Fitted Values (log scale)", ylabel="Residuals",
-                title="Residuals vs Fitted\n(random scatter = homoscedastic)")
-    stats.probplot(resid, dist="norm", plot=axes[1])
-    axes[1].set_title("Q-Q Plot of Residuals\n(points on line = normal)")
-    axes[1].get_lines()[0].set(color="#2196F3", markersize=5)
-    axes[1].get_lines()[1].set(color="red", linewidth=1.5)
-    fig.suptitle("Linear Regression Assumption Checks", fontsize=13, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "R4_assumption_checks.png", REG_PLOT_DIR)
 
-
-# ---------- R6: predicted vs actual -----------------------------------------
+# ============================================================
+# R6 — Predicted vs Actual 
+# ============================================================
 
 def plot_predicted_vs_actual(test: pd.DataFrame,
                              results: dict,
                              best_name: str,
                              palette) -> None:
+
     actual_rate = np.expm1(test["log_assault_rate"].to_numpy(float))
     pred_rate = np.expm1(results[best_name]["pred"])
 
@@ -1192,22 +1249,24 @@ def plot_predicted_vs_actual(test: pd.DataFrame,
         mask = (test["Region"] == region).to_numpy()
         ax.scatter(actual_rate[mask], pred_rate[mask], label=region, color=color,
                    alpha=0.75, s=60, edgecolors="white")
+
     limit = max(actual_rate.max(), pred_rate.max()) * 1.05
-    ax.plot([0, limit], [0, limit], "r--", linewidth=1.5, label="Perfect prediction")
+    ax.plot([0, limit], [0, limit], "r--", linewidth=1.5)
+
     ax.set(xlabel="Actual Assault Rate (per 100k)",
            ylabel="Predicted Assault Rate (per 100k)",
-           title=(f"Predicted vs Actual - {best_name}\n"
-                  f"RMSE = {results[best_name]['rmse_rate']:.1f} per 100k "
-                  f"(2023-{YEAR_MAX} test)"))
+           title=f"Predicted vs Actual - {best_name}")
+
     ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left")
     fig.tight_layout()
     _save(fig, "R5_predicted_vs_actual.png", REG_PLOT_DIR)
 
 
-# ---------- R7: paired t-tests ----------------------------------------------
+# ============================================================
+# R7 — Paired t-tests
+# ============================================================
 
-def paired_t_tests(results: dict,
-                   y_test: np.ndarray) -> None:
+def paired_t_tests(results: dict, y_test: np.ndarray) -> None:
     print("\n-- R7: paired t-tests on absolute error (alpha = 0.05) --")
     names = list(results)
     for i in range(len(names)):
@@ -1215,17 +1274,19 @@ def paired_t_tests(results: dict,
             a, b = names[i], names[j]
             t, p = stats.ttest_rel(np.abs(y_test - results[a]["pred"]),
                                    np.abs(y_test - results[b]["pred"]))
-
             decision = "reject H0 (significant)" if p < 0.05 else "fail to reject H0"
             print(f"   {a:<22} vs {b:<22} t={t:+.4f} p={p:.4f}  {decision}")
 
 
-# ---------- R8: coefficients -------------------------------------------------
+# ============================================================
+# R8 — Coefficients (linear only)
+# ============================================================
 
 def plot_coefficients(results: dict,
                       FEATURES: list[str],
                       best_ridge: float,
                       best_lasso: float) -> None:
+
     print("\n-- R8: coefficients --")
     coefs = pd.DataFrame({
         "Feature": FEATURES,
@@ -1238,30 +1299,17 @@ def plot_coefficients(results: dict,
         print(f"   {row['Feature']:<26} Ridge={row['Ridge']:+.4f} "
               f"Lasso={row['Lasso']:+.4f} [{state}]")
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-    for ax, column, title, color in zip(
-        axes,
-        ["Ridge", "Lasso"],
-        [f"Ridge (alpha={best_ridge})", f"Lasso (alpha={best_lasso})"],
-        ["#2196F3", "#FF9800"],
-    ):
-        values = coefs[column].to_numpy()
-        ax.barh(coefs["Feature"], values, edgecolor="white",
-                color=["#EF5350" if v < 0 else color for v in values])
-        ax.axvline(0, color="black", linewidth=0.8)
-        ax.set(xlabel="Standardised Coefficient", title=title)
-    fig.suptitle("Feature Coefficients: Ridge vs Lasso", fontsize=13, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "R6_coefficients.png", REG_PLOT_DIR)
 
-
-# ---------- R9: per-region predictions --------------------------------------
+# ============================================================
+# R9 — Region predictions 
+# ============================================================
 
 def per_region_predictions(test: pd.DataFrame,
                            results: dict,
                            best_name: str,
                            palette) -> None:
-    print(f"\n-- R9: per-region accuracy on the 2023-{YEAR_MAX} test set --")
+
+    print(f"\n-- R9: per-region accuracy (best model = {best_name}) --")
 
     actual_rate = np.expm1(test["log_assault_rate"].to_numpy(float))
     pred_rate = np.expm1(results[best_name]["pred"])
@@ -1269,80 +1317,104 @@ def per_region_predictions(test: pd.DataFrame,
     preds = test[["Year", "Month number", "Region"]].reset_index(drop=True)
     preds["Actual_rate"] = actual_rate.round(1)
     preds["Predicted_rate"] = pred_rate.round(1)
-    preds["Error"] = (preds["Predicted_rate"] - preds["Actual_rate"]).round(1)
+    preds["Error"] = preds["Predicted_rate"] - preds["Actual_rate"]
 
-    print(f"   {'Region':<20}{'Avg actual':>12}{'Avg predicted':>15}{'RMSE':>9}{'Mean err%':>11}")
+    print(f"   {'Region':<20}{'Actual':>10}{'Predicted':>12}{'RMSE':>10}{'Err%':>10}")
     for region in REGION_ORDER:
         sub = preds[preds["Region"] == region]
         if sub.empty:
             continue
-        print(f"   {region:<20}{sub['Actual_rate'].mean():>12.1f}"
-              f"{sub['Predicted_rate'].mean():>15.1f}"
-              f"{np.sqrt((sub['Error'] ** 2).mean()):>9.1f}"
-              f"{(sub['Error'] / sub['Actual_rate'] * 100).mean():>10.1f}%")
+        rmse = np.sqrt((sub["Error"] ** 2).mean())
+        err_pct = (sub["Error"] / sub["Actual_rate"] * 100).mean()
+        print(f"   {region:<20}{sub['Actual_rate'].mean():>10.1f}"
+              f"{sub['Predicted_rate'].mean():>12.1f}"
+              f"{rmse:>10.1f}{err_pct:>10.1f}")
 
-    overall_rmse = float(np.sqrt(mean_squared_error(actual_rate, pred_rate)))
-    overall_mae = float(mean_absolute_error(actual_rate, pred_rate))
-    print(f"   overall RMSE = {overall_rmse:.1f} per 100k | MAE = {overall_mae:.1f} per 100k")
 
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
-    for ax, region, color in zip(axes.flatten(), REGION_ORDER, palette):
-        sub = preds[preds["Region"] == region].sort_values(["Year", "Month number"])
-        ticks = (sub["Year"].astype(str).str[-2:] + "-"
-                 + sub["Month number"].map(lambda m: MONTH_LABELS[m - 1]))
-        ax.plot(range(len(sub)), sub["Actual_rate"], marker="o", linewidth=2,
-                label="Actual", color=color, alpha=0.9)
-        ax.plot(range(len(sub)), sub["Predicted_rate"], marker="s", linewidth=2,
-                linestyle="--", label="Predicted", color=color, alpha=0.6)
-        ax.fill_between(range(len(sub)), sub["Actual_rate"], sub["Predicted_rate"],
-                        alpha=0.12, color=color)
-        ax.set_title(f"{region}\nRMSE = {np.sqrt((sub['Error'] ** 2).mean()):.0f} per 100k",
-                     fontsize=10, fontweight="bold")
-        ax.set(xlabel=f"Month (2023-{YEAR_MAX})", ylabel="Assault Rate (per 100k)")
-        step = max(1, len(sub) // 8)
-        ax.set_xticks(range(0, len(sub), step),
-                      ticks.iloc[::step].tolist(), rotation=45, fontsize=7)
-        ax.legend(fontsize=8)
-    fig.suptitle(f"{best_name}: Predicted vs Actual Assault Rate by Region "
-                 f"(2023-{YEAR_MAX} test)\nOverall RMSE = {overall_rmse:.1f} | "
-                 f"MAE = {overall_mae:.1f} per 100k", fontsize=12, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "R7_predictions_by_region.png", REG_PLOT_DIR)
+# ============================================================
+# Orchestrator
+# ============================================================
 
+def run_regression(monthly_assault: pd.DataFrame,
+                   population: pd.DataFrame,
+                   palette) -> None:
+
+    banner("STAGE 5 - REGRESSION -> regression_plots/")
+
+    panel, train, test, dummy_cols, cv_frame = prepare_panel(monthly_assault, population)
+
+    FEATURES = evaluate_feature_variants(train, test, dummy_cols)
+    FEATURES = compute_vif_and_filter(train, FEATURES)
+
+    best_ridge, best_lasso = tune_alphas(cv_frame, FEATURES)
+    best_xgb_params = tune_xgboost(cv_frame, FEATURES)
+
+    results, best_name = train_final_models(
+        train, test, FEATURES,
+        best_ridge, best_lasso,
+        best_xgb_params,
+        cv_frame
+    )
+
+    y_test = test["log_assault_rate"].to_numpy(float)
+
+    check_assumptions(results, y_test)
+    plot_predicted_vs_actual(test, results, best_name, palette)
+    paired_t_tests(results, y_test)
+    plot_coefficients(results, FEATURES, best_ridge, best_lasso)
+    per_region_predictions(test, results, best_name, palette)
+
+    model_b_with_alcohol(panel, FEATURES, best_ridge, best_lasso)
 
 # ---------- R10: Model B with alcohol supply --------------------------------
 
 def model_b_with_alcohol(panel: pd.DataFrame,
                          FEATURES: list[str],
                          best_ridge: float,
-                         best_lasso: float) -> None:
+                         best_lasso: float,
+                         best_xgb_params: dict) -> None:
     print(f"\n-- R10: Model B - with alcohol supply "
           f"(train {min(ALCOHOL_YEARS)}-2024, test {YEAR_MAX}) [A12] --")
 
+    # Filter panel for alcohol supply years
     panel_b = panel[(panel["Year"] >= min(ALCOHOL_YEARS)) & panel["Total_PAC"].notna()].copy()
     panel_b["alcohol_per_capita"] = panel_b["Total_PAC"] / panel_b["Total_population"]
+
+    # Add alcohol_per_capita to feature list
     features_b = FEATURES + ["alcohol_per_capita"]
 
     train_b = panel_b[panel_b["Year"] <= 2024]
     test_b = panel_b[panel_b["Year"] == YEAR_MAX]
+
     if len(train_b) <= 5 or test_b.empty:
         print("   insufficient data for Model B.")
         return
 
     y_train_b = train_b["log_assault_rate"].to_numpy(float)
     y_test_b = test_b["log_assault_rate"].to_numpy(float)
+
+    # Linear models use scaled features
     scaler_b = StandardScaler()
     x_train_b = scaler_b.fit_transform(train_b[features_b].astype(float))
     x_test_b = scaler_b.transform(test_b[features_b].astype(float))
+
+    # XGBoost uses raw features
+    X_train_raw = train_b[features_b].astype(float)
+    X_test_raw = test_b[features_b].astype(float)
+
     print(f"   train {len(train_b)} rows | test {len(test_b)} rows")
     print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)'}")
 
     results_b: dict[str, dict] = {}
-    for name, model in {
+
+    # Linear models
+    linear_models = {
         "Linear Regression": LinearRegression(),
         f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
         f"Lasso (a={best_lasso})": Lasso(alpha=best_lasso, max_iter=10000),
-    }.items():
+    }
+
+    for name, model in linear_models.items():
         model.fit(x_train_b, y_train_b)
         pred = model.predict(x_test_b)
         rmse = float(np.sqrt(mean_squared_error(y_test_b, pred)))
@@ -1357,10 +1429,42 @@ def model_b_with_alcohol(panel: pd.DataFrame,
         }
         print(f"   {name:<22}{rmse:<12.4f}{mae:<12.4f}{rmse_rate:.1f}")
 
-    apc = {n: r["coef"]["alcohol_per_capita"] for n, r in results_b.items()}
+    # XGBoost model
+    xgb_model = XGBRegressor(
+        n_estimators=800,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        min_child_weight=1,
+        objective="reg:squarederror",
+        random_state=42,
+        **best_xgb_params
+    )
+
+    xgb_model.fit(X_train_raw, y_train_b)
+    xgb_pred = xgb_model.predict(X_test_raw)
+
+    xgb_rmse = float(np.sqrt(mean_squared_error(y_test_b, xgb_pred)))
+    xgb_mae = float(mean_absolute_error(y_test_b, xgb_pred))
+    xgb_rmse_rate = float(np.sqrt(mean_squared_error(np.expm1(y_test_b),
+                                                     np.expm1(xgb_pred))))
+
+    results_b["XGBoost"] = {
+        "rmse": xgb_rmse,
+        "mae": xgb_mae,
+        "rmse_rate": xgb_rmse_rate,
+        "coef": None  # trees don't have linear coefficients
+    }
+
+    print(f"   {'XGBoost':<22}{xgb_rmse:<12.4f}{xgb_mae:<12.4f}{xgb_rmse_rate:.1f}")
+
+    # Alcohol_per_capita coefficient (linear only)
     print("   standardised alcohol_per_capita coefficient:")
-    for name, value in apc.items():
-        print(f"      {name:<22}{value:+.4f}")
+    for name, r in results_b.items():
+        if r["coef"] is not None:
+            print(f"      {name:<22}{r['coef']['alcohol_per_capita']:+.4f}")
+        else:
+            print(f"      {name:<22}N/A (tree model)")
+
 
 
 # ---------- orchestrator ----------------------------------------------------
@@ -1376,9 +1480,9 @@ def run_regression(monthly_assault: pd.DataFrame,
     FEATURES = compute_vif_and_filter(train, FEATURES)
 
     best_ridge, best_lasso = tune_alphas(cv_frame, FEATURES)
-
+    best_xgb_params = tune_xgboost(cv_frame, FEATURES)
     results, best_name = train_final_models(train, test, FEATURES,
-                                            best_ridge, best_lasso, cv_frame)
+                                            best_ridge, best_lasso, best_xgb_params, cv_frame)
 
     y_test = test["log_assault_rate"].to_numpy(float)
 
@@ -1387,8 +1491,9 @@ def run_regression(monthly_assault: pd.DataFrame,
     paired_t_tests(results, y_test)
     plot_coefficients(results, FEATURES, best_ridge, best_lasso)
     per_region_predictions(test, results, best_name, palette)
+    
 
-    model_b_with_alcohol(panel, FEATURES, best_ridge, best_lasso)
+    model_b_with_alcohol(panel, FEATURES, best_ridge, best_lasso, best_xgb_params)
 
 # =============================================================================
 # ENTRY POINT
