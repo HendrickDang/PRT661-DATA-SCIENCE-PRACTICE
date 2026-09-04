@@ -1,6 +1,5 @@
 """
-evaluation.py - Forecast evaluation module for PRT661 Group DAN2 (Theme 2)
-Author: Van Hoi (Hendrick) Dang - S395598
+evaluation.py - Forecast evaluation module
 
 Purpose
 -------
