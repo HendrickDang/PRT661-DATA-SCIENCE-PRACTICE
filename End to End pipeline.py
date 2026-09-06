@@ -882,9 +882,7 @@ def build_regression_panel(monthly_assault: pd.DataFrame,
     panel["sin_month"] = np.sin(2 * np.pi * panel["Month number"] / 12)
     panel["cos_month"] = np.cos(2 * np.pi * panel["Month number"] / 12)
     panel["Season"] = panel["Month number"].isin([11, 12, 1, 2, 3, 4]).astype(int)  # 1=Wet
-    panel["is_christmas"] = panel["Month number"] == 12
     panel["is_new_year"] = panel["Month number"] == 1
-    panel["is_pay_week"] = panel["date"].dt.isocalendar().week % 2 == 0
 
 
     for lag in (1, 3, 12):
@@ -1001,6 +999,30 @@ def evaluate_feature_variants(train: pd.DataFrame,
     _save(fig, "R1_feature_variants.png", REG_PLOT_DIR)
 
     return FEATURES
+
+def backward_selection(df: pd.DataFrame, y_col: str, features: list[str],
+                       p_thresh: float = 0.05) -> list[str]:
+    """Backward selection using p-values from OLS."""
+    import statsmodels.api as sm
+
+    remaining = features.copy()
+
+    while True:
+        X = sm.add_constant(df[remaining].astype(float))
+        y = df[y_col].astype(float)
+
+        model = sm.OLS(y, X).fit()
+        pvals = model.pvalues.drop("const")
+
+        worst_feature = pvals.idxmax()
+        worst_p = pvals.max()
+
+        if worst_p > p_thresh:
+            remaining.remove(worst_feature)
+        else:
+            break
+
+    return remaining
 
 
 # ---------- R2: VIF ---------------------------------------------------------
@@ -1477,8 +1499,10 @@ def run_regression(monthly_assault: pd.DataFrame,
     panel, train, test, dummy_cols, cv_frame = prepare_panel(monthly_assault, population)
 
     FEATURES = evaluate_feature_variants(train, test, dummy_cols)
+    FEATURES = backward_selection(train, "log_assault_rate", FEATURES)
     FEATURES = compute_vif_and_filter(train, FEATURES)
 
+    
     best_ridge, best_lasso = tune_alphas(cv_frame, FEATURES)
     best_xgb_params = tune_xgboost(cv_frame, FEATURES)
     results, best_name = train_final_models(train, test, FEATURES,
