@@ -60,15 +60,12 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
 from scipy import stats
 from sklearn.linear_model import Lasso, LinearRegression, Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
+import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from xgboost import XGBRegressor
 
@@ -882,8 +879,6 @@ def build_regression_panel(monthly_assault: pd.DataFrame,
     panel["sin_month"] = np.sin(2 * np.pi * panel["Month number"] / 12)
     panel["cos_month"] = np.cos(2 * np.pi * panel["Month number"] / 12)
     panel["Season"] = panel["Month number"].isin([11, 12, 1, 2, 3, 4]).astype(int)  # 1=Wet
-    panel["is_new_year"] = panel["Month number"] == 1
-
 
     for lag in (1, 3, 12):
         panel[f"assault_rate_lag{lag}"] = (panel.groupby("Region")["Assault_rate_100k"]
@@ -1003,8 +998,6 @@ def evaluate_feature_variants(train: pd.DataFrame,
 def backward_selection(df: pd.DataFrame, y_col: str, features: list[str],
                        p_thresh: float = 0.05) -> list[str]:
     """Backward selection using p-values from OLS."""
-    import statsmodels.api as sm
-
     remaining = features.copy()
 
     while True:
@@ -1031,11 +1024,15 @@ def compute_vif_and_filter(train: pd.DataFrame,
                            FEATURES: list[str]) -> list[str]:
     print("\n-- R2: VIF (multicollinearity) --")
 
-    vif_matrix = train[FEATURES].astype(float).to_numpy()
+    # A constant column is required before computing VIF - without it, VIF is
+    # measuring collinearity around the origin rather than around the mean,
+    # which inflates every value. The constant itself is not a real feature,
+    # so it is excluded from the reported table (index 0 is skipped below).
+    X_with_const = sm.add_constant(train[FEATURES].astype(float))
     vif = pd.DataFrame({
         "Feature": FEATURES,
-        "VIF": [variance_inflation_factor(vif_matrix, i)
-                for i in range(len(FEATURES))],
+        "VIF": [variance_inflation_factor(X_with_const.to_numpy(), i)
+                for i in range(1, X_with_const.shape[1])],
     }).sort_values("VIF", ascending=False)
 
     to_remove = vif.loc[vif["VIF"] > 30, "Feature"].tolist()
@@ -1052,7 +1049,7 @@ def compute_vif_and_filter(train: pd.DataFrame,
         print("\nRemoving due to VIF > 30:", to_remove)
         FEATURES = [f for f in FEATURES if f not in to_remove]
     else:
-        print("\nNo features removed (all VIF ≤ 30).")
+        print("\nNo features removed (all VIF <= 30).")
 
     return FEATURES
 
@@ -1119,10 +1116,13 @@ def tune_xgboost(cv_frame: pd.DataFrame,
         {"max_depth": 6, "learning_rate": 0.02, "reg_alpha": 4.0, "reg_lambda": 6.0},
     ]
 
-    scores = {}
+    # scores keyed by index into param_grid, not by a stringified dict - this
+    # avoids reconstructing the dict with eval() (unsafe in general, and
+    # unnecessary here since the grid itself already gives us the mapping).
+    scores: dict[int, float] = {}
 
     print(f"   {'Parameters':<55}{'CV RMSE'}")
-    for params in param_grid:
+    for idx, params in enumerate(param_grid):
         model = XGBRegressor(
             n_estimators=800,
             subsample=0.9,
@@ -1134,16 +1134,16 @@ def tune_xgboost(cv_frame: pd.DataFrame,
         )
 
         rmse = cv_rmse_for_features(model, cv_frame, FEATURES)
-        scores[str(params)] = rmse
+        scores[idx] = rmse
 
         print(f"   {str(params):<55}{rmse:.4f}")
 
     # Best parameter set
-    best_params_str = min(scores, key=scores.get)
-    best_params = eval(best_params_str)
+    best_idx = min(scores, key=scores.get)
+    best_params = param_grid[best_idx]
 
-    print(f"\n   -> Best XGBoost params = {best_params_str}")
-    print(f"      CV RMSE = {scores[best_params_str]:.4f}")
+    print(f"\n   -> Best XGBoost params = {best_params}")
+    print(f"      CV RMSE = {scores[best_idx]:.4f}")
 
     # Plot tuning curve
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -1352,41 +1352,6 @@ def per_region_predictions(test: pd.DataFrame,
               f"{sub['Predicted_rate'].mean():>12.1f}"
               f"{rmse:>10.1f}{err_pct:>10.1f}")
 
-
-# ============================================================
-# Orchestrator
-# ============================================================
-
-def run_regression(monthly_assault: pd.DataFrame,
-                   population: pd.DataFrame,
-                   palette) -> None:
-
-    banner("STAGE 5 - REGRESSION -> regression_plots/")
-
-    panel, train, test, dummy_cols, cv_frame = prepare_panel(monthly_assault, population)
-
-    FEATURES = evaluate_feature_variants(train, test, dummy_cols)
-    FEATURES = compute_vif_and_filter(train, FEATURES)
-
-    best_ridge, best_lasso = tune_alphas(cv_frame, FEATURES)
-    best_xgb_params = tune_xgboost(cv_frame, FEATURES)
-
-    results, best_name = train_final_models(
-        train, test, FEATURES,
-        best_ridge, best_lasso,
-        best_xgb_params,
-        cv_frame
-    )
-
-    y_test = test["log_assault_rate"].to_numpy(float)
-
-    check_assumptions(results, y_test)
-    plot_predicted_vs_actual(test, results, best_name, palette)
-    paired_t_tests(results, y_test)
-    plot_coefficients(results, FEATURES, best_ridge, best_lasso)
-    per_region_predictions(test, results, best_name, palette)
-
-    model_b_with_alcohol(panel, FEATURES, best_ridge, best_lasso)
 
 # ---------- R10: Model B with alcohol supply --------------------------------
 
