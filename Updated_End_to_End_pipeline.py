@@ -44,6 +44,12 @@ ASSUMPTION LOG - the non-obvious decisions, referenced as [A#] in the code.
       folds would train on one region and test on another.
 [A14] PCA uses age-group shares, not counts: counts all scale with region size,
       leaving PC1 at ~99% and measuring only "how big is this region".
+[A15] The CV scaler is fitted inside a Pipeline so it refits on each fold's
+      training rows. Fitting StandardScaler on the whole frame before
+      TimeSeriesSplit leaks later-fold statistics into the earlier folds.
+[A16] Feature-variant selection uses TimeSeriesSplit CV over the training
+      period. Selecting on the 2023-2025 test set and then evaluating the
+      final models on that same set made reported performance optimistic.
 ---------------------------------------------------------------------------
 """
 
@@ -905,7 +911,7 @@ def build_regression_panel(monthly_assault: pd.DataFrame,
 def cv_rmse_for_features(model, cv_frame: pd.DataFrame, features: list[str]) -> float:
     """TimeSeriesSplit CV RMSE over calendar order for given model + feature set.
 
-    [A14] The scaler is fitted inside a Pipeline so that it refits on each fold's
+    [A15] The scaler is fitted inside a Pipeline so that it refits on each fold's
     training rows only. Fitting StandardScaler on the whole frame before splitting
     leaks fold-level distribution information into every earlier fold.
     """
@@ -948,13 +954,13 @@ def evaluate_feature_variants(train: pd.DataFrame,
                               dummy_cols: list[str]) -> list[str]:
     """Select the feature variant using CV folds drawn from the training period only.
 
-    [A15] This comparison previously scored each variant on the 2023-2025 test set
+    [A16] This comparison previously scored each variant on the 2023-2025 test set
     and selected the minimum, after which the final models were evaluated on that
     same set. The test data therefore influenced a modelling decision and reported
     performance was optimistic. Selection now uses TimeSeriesSplit CV over the
     training period, leaving the test set untouched until final evaluation.
     """
-    print("\n-- R1: feature variant comparison (Linear Regression, train-period CV [A15]) --")
+    print("\n-- R1: feature variant comparison (Linear Regression, train-period CV [A16]) --")
 
     variants = {
         "V1: Temporal": FEATURE_VARIANTS_BASE,
