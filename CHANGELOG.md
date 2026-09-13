@@ -55,6 +55,30 @@ The two crime files use different offence category labels. A manual translation 
 **Region boundary mismatch.**
 Crime data uses 7 NT Police reporting regions; population and alcohol data use the 6 NTG statistics regions. A two-stage remapping was added, including SA2-level lookup for NT Balance rows. Without this, Greater Darwin population would be double-counted and per-capita rates roughly halved.
 
+### Repository structure
+
+**Source datasets moved to `dataset/source/` (19-20 August).**
+Raw files were originally committed to `dataset/` directly. They were relocated to a dedicated `source/` folder to establish the three-stage convention `dataset/source/` to `dataset/raw/` to `dataset/processed/`, so that original files are never overwritten by pipeline output.
+
+**`Execution Instructions` folder renamed (26 August).**
+The original folder name contained a typo (`Execution Instrctions`) and was recreated correctly.
+
+**Working document consolidated to `documents/Assignment 2.docx` (9 September).**
+Two parallel copies of the report existed briefly (`PRT661_Assignment 2_Group_2_Theme_2.docx` and `Assignment 2.docx`). The longer-named copy was deleted to prevent the team editing different files. Because a `.docx` cannot be merged by Git, the group now coordinates edits in the team chat before opening the file.
+
+**Visualisation outputs reorganised into `Visualizations/` (10 September).**
+Plots previously sat at the repository root alongside code.
+
+### Code structure
+
+**`run_regression` decomposed into separate functions (2 September).**
+The regression stage was originally a single monolithic function. It was split into discrete functions for feature-variant comparison, VIF screening, alpha tuning, XGBoost tuning and final model training, to make the stage easier to debug and to allow individual steps to be modified without touching the rest.
+
+### Version control practice
+
+**Branch and pull request workflow adopted.**
+Changes now go through a named branch and a pull request rather than direct commits to `main`, in line with the working agreements below. Pull requests #5 to #7 record this. Earlier work in July and August was committed directly to `main`.
+
 ### Architecture
 
 **AWS-equivalent mapping corrected.**
