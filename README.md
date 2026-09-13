@@ -33,7 +33,7 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 ## Requirements
 
 ```bash
-pip install -r requirements.txt
+pip install -r "Environment Setup Instructions/requirements.txt"
 ```
 
 Python 3.8 or newer. Versions are pinned in `requirements.txt` because XGBoost results are not reproducible across versions: the same `random_state` produces different trees, and team members on different versions obtained RMSE(/100k) of 80.3 and 84.5 for the same model. The figures in the report were produced with the pinned versions. Linear models are unaffected.
@@ -89,6 +89,8 @@ Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100
 | `documents/` | Working documents and meeting minutes |
 | `diagrams/` | Architecture and workflow diagrams |
 | `Reports/` | Assessment reports |
+| `Environment Setup Instructions/` | Environment setup, including `requirements.txt` |
+| `Execution Instructions/` | Run instructions |
 | `CHANGELOG.md` | Change log: all changes since Assessment 1, with justification |
 
 ## Data sources

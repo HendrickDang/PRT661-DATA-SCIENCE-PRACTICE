@@ -1,5 +1,5 @@
 # PRT661 Data Science Practice - Dan2 Theme 2
-# Install with: pip install -r requirements.txt
+# Install with: pip install -r "Environment Setup Instructions/requirements.txt"
 #
 # Versions are pinned because XGBoost results are not reproducible across
 # versions: the same random_state produces different trees, and team members
