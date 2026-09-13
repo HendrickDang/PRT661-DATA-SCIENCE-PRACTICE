@@ -1,0 +1,136 @@
+<mxfile host="Electron" agent="PRT661" version="28.0.6">
+  <diagram name="Workflow" id="prt661-workflow">
+    <mxGraphModel dx="1600" dy="1200" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="PRT661 Dan2, Theme 2: End-to-End Analytics Workflow&lt;br&gt;&lt;font style=&#x27;font-size:10px&#x27;&gt;Forecasting assault rates across NT regions to support PFES resource planning&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;fontSize=14;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="12" width="1324" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ph0" value="&lt;b&gt;1. Acquire and Ingest&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=top;fontSize=12;fontStyle=1;dashed=0;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="40" y="72" width="244" height="322" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" value="&lt;b&gt;1. Source raw files&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;NT Open Data Portal: crime, population ERP, alcohol PAC&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Will, Thomas&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="54" y="112" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="&lt;b&gt;2. Ingest and validate schema&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;pandas; dtype, region and date checks&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Will&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="54" y="204" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="&lt;b&gt;3. Version-controlled data store&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;GitHub repo, dataset/source&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Will&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="54" y="296" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="ph1" value="&lt;b&gt;2. Clean and Integrate&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=top;fontSize=12;fontStyle=1;dashed=0;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="310" y="72" width="244" height="322" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="&lt;b&gt;4. Clean and harmonise&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;region names, date parsing, missing values&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Emma&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="324" y="112" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="&lt;b&gt;5. Align temporal grain&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;annual ERP and quarterly PAC to monthly&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Emma&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="324" y="204" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" value="&lt;b&gt;6. Build monthly region panel&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;assault rate per 100,000 residents&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Emma&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="324" y="296" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="ph2" value="&lt;b&gt;3. Feature and Split&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=top;fontSize=12;fontStyle=1;dashed=0;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="580" y="72" width="244" height="322" as="geometry" />
+        </mxCell>
+        <mxCell id="s7" value="&lt;b&gt;7. Feature engineering&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;lags, rolling means, seasonal terms&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick; Thomas review&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="594" y="112" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s8" value="&lt;b&gt;8. Assemble feature variants&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;V1 to V4&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="594" y="204" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s9" value="&lt;b&gt;9. Chronological split&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;train up to 2022 | test 2023-2025 held out&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="594" y="296" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="ph3" value="&lt;b&gt;4. Model and Evaluate&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=top;fontSize=12;fontStyle=1;dashed=0;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="850" y="72" width="244" height="414" as="geometry" />
+        </mxCell>
+        <mxCell id="s10" value="&lt;b&gt;10. Model selection on training CV&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;scaler inside Pipeline, refits on each fold&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="864" y="112" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s11" value="&lt;b&gt;11. Fit candidate models&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;Linear, Ridge 0.1, Lasso 0.01, XGBoost (Thomas)&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick, Thomas&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="864" y="204" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s12" value="&lt;b&gt;12. Rolling-origin backtest&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;h = 1, 3, 6, 12 vs seasonal naive and MA(12)&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="864" y="296" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s13" value="&lt;b&gt;13. Select split specification&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;XGBoost at h = 1, MA(12) at h of 3 or more&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="864" y="388" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="ph4" value="&lt;b&gt;5. Serve and Monitor&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=top;fontSize=12;fontStyle=1;dashed=0;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="1120" y="72" width="244" height="414" as="geometry" />
+        </mxCell>
+        <mxCell id="s14" value="&lt;b&gt;14. Persist artefacts&lt;/b&gt;&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;metrics and prediction CSVs done; joblib models A3&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Hendrick&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;" parent="1" vertex="1">
+          <mxGeometry x="1134" y="112" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s15" value="&lt;b&gt;15. Streamlit dashboard&lt;/b&gt; (planned, A3)&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;forecast view for PFES&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Thomas&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;dashed=1;" parent="1" vertex="1">
+          <mxGeometry x="1134" y="204" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s16" value="&lt;b&gt;16. Deploy&lt;/b&gt; (planned, A3)&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;Streamlit Community Cloud&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Thomas&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;dashed=1;" parent="1" vertex="1">
+          <mxGeometry x="1134" y="296" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="s17" value="&lt;b&gt;17. Monitor&lt;/b&gt; (planned, A3)&lt;div&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;drift, breaks Nov 2023 and Apr 2025, retrain&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;Owner: Emma&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;dashed=1;" parent="1" vertex="1">
+          <mxGeometry x="1134" y="388" width="216" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="e1_2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s1" target="s2" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2_3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s2" target="s3" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4_5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s4" target="s5" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5_6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s5" target="s6" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7_8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s7" target="s8" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8_9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s8" target="s9" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10_11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s10" target="s11" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11_12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s11" target="s12" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12_13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s12" target="s13" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14_15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s14" target="s15" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15_16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s15" target="s16" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16_17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="s16" target="s17" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x3_4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="s3" target="s4" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x6_7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="s6" target="s7" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x9_10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="s9" target="s10" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="x13_14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;strokeColor=#000000;fontColor=#000000;strokeWidth=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="s13" target="s14" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="leak" value="&lt;b&gt;Leakage controls applied at steps 9 to 12&lt;/b&gt;&lt;div style=&#x27;font-size:9px;text-align:left&#x27;&gt;[A15] StandardScaler moved inside the Pipeline so it refits on every CV fold&lt;br&gt;[A16] Feature-variant selection performed on training-period CV, not on the 2023-2025 test set&lt;br&gt;[A17] cv_frame restricted to the training period; Ridge alpha changed from 1.0 to 0.1&lt;br&gt;The held-out test set is used once only, at final evaluation.&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;dashed=1;verticalAlign=top;fontSize=11;spacingTop=6;spacingLeft=10;spacingRight=10;align=center;" parent="1" vertex="1">
+          <mxGeometry x="40" y="514" width="1324" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="gov" value="&lt;b&gt;Governance and reproducibility, applied across every step&lt;/b&gt;&lt;div style=&#x27;font-size:9px&#x27;&gt;Jira SCRUM board and sprint timeline | GitHub branch and pull-request workflow | CHANGELOG.md | pinned requirements.txt | execution instructions | meeting minutes | privacy, security and risk register&lt;br&gt;Owner: Thomas, project governance&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;align=center;verticalAlign=middle;fontSize=10;arcSize=8;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="40" y="620" width="1324" height="54" as="geometry" />
+        </mxCell>
+        <mxCell id="note" value="Ownership follows Table 4 and the Section 4 contribution summary, and is traceable in the GitHub commit history (for example Thomas added the XGBoost model in commit 434caba and refactored the regression function in 431cc3c). Dashed boxes are planned for Assessment 3 and are not yet implemented." style="text;html=1;align=left;verticalAlign=middle;fontSize=9;fontColor=#000000;" parent="1" vertex="1">
+          <mxGeometry x="40" y="682" width="1324" height="22" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
