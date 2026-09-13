@@ -33,10 +33,10 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 ## Requirements
 
 ```bash
-pip install pandas numpy scikit-learn xgboost statsmodels matplotlib seaborn scipy openpyxl
+pip install -r requirements.txt
 ```
 
-Python 3.8 or newer. `openpyxl` is required to read the population and alcohol `.xlsx` sources.
+Python 3.8 or newer. Versions are pinned in `requirements.txt` because XGBoost results are not reproducible across versions: the same `random_state` produces different trees, and team members on different versions obtained RMSE(/100k) of 80.3 and 84.5 for the same model. The figures in the report were produced with the pinned versions. Linear models are unaffected.
 
 ## Running the pipeline
 
@@ -88,6 +88,8 @@ Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100
 | `regression_plots/` | 4 regression figures |
 | `documents/` | Working documents and meeting minutes |
 | `diagrams/` | Architecture and workflow diagrams |
+| `Reports/` | Assessment reports |
+| `CHANGELOG.md` | Change log: all changes since Assessment 1, with justification |
 
 ## Data sources
 
