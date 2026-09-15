@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor  # noqa: F401  (documented alternative)
 from sklearn.linear_model import Lasso, LinearRegression, Ridge
+from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
@@ -346,8 +347,23 @@ def main() -> None:
 
     models = {
         "Linear": LinearRegression(),
-        "Ridge (a=1.0)": Ridge(alpha=1.0),
+        "Ridge (a=0.1)": Ridge(alpha=0.1),  # [E7] matches the tuned alpha from the pipeline under [A17]
         "Lasso (a=0.01)": Lasso(alpha=0.01, max_iter=5000),
+        # [E6] XGBoost is reported as the best model in Section 4.5, so it must
+        # appear in the benchmark table. Params match the pipeline's tuned grid.
+        # The scaler in make_pipe is inert for a tree model.
+        "XGBoost": XGBRegressor(
+            n_estimators=800,
+            max_depth=3,
+            learning_rate=0.05,
+            reg_alpha=1.0,
+            reg_lambda=3.0,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            min_child_weight=1,
+            objective="reg:squarederror",
+            random_state=42,
+        ),
     }
 
     print("\n[eval] E4 running rolling-origin backtest ...")

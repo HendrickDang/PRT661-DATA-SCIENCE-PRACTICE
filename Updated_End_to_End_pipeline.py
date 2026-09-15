@@ -50,8 +50,16 @@ ASSUMPTION LOG - the non-obvious decisions, referenced as [A#] in the code.
 [A16] Feature-variant selection uses TimeSeriesSplit CV over the training
       period. Selecting on the 2023-2025 test set and then evaluating the
       final models on that same set made reported performance optimistic.
+[A17] cv_frame is restricted to the training period so that alpha tuning and
+      XGBoost tuning never cross-validate over test rows. Note that the
+      pipeline computes CV RMSE on the log scale, which is the model's fitting
+      objective; evaluation.py back-transforms and computes it on the assault
+      rate scale. The two select different variants, and both are correct for
+      the question they ask - see Section 4.6.
 ---------------------------------------------------------------------------
 """
+
+from __future__ import annotations
 
 import json
 import sys
@@ -943,7 +951,10 @@ def prepare_panel(monthly_assault: pd.DataFrame,
           f"test 2023-{YEAR_MAX}: {len(test)} rows")
 
     # TimeSeriesSplit needs rows in calendar order, not region order.
-    cv_frame = panel.sort_values(["date", "Region"]).reset_index(drop=True)
+    # [A17] cv_frame is restricted to the training period. It previously spanned
+    # the full panel, so alpha tuning, XGBoost tuning and the variant comparison
+    # all cross-validated over folds containing 2023-2025 test rows.
+    cv_frame = train.sort_values(["date", "Region"]).reset_index(drop=True)
 
     return panel, train, test, dummy_cols, cv_frame
 

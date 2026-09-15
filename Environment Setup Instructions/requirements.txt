@@ -1,0 +1,18 @@
+# PRT661 Data Science Practice - Dan2 Theme 2
+# Install with: pip install -r "Environment Setup Instructions/requirements.txt"
+#
+# Versions are pinned because XGBoost results are not reproducible across
+# versions: the same random_state produces different trees, and team members
+# running different versions obtained RMSE(/100k) of 80.3 and 84.5 for the
+# same model. Linear models are unaffected. The figures reported in Section 4.5
+# and Section 4.6 were produced with the versions below.
+
+pandas==2.0.3
+numpy==1.24.4
+scikit-learn==1.3.2
+xgboost==2.1.4
+statsmodels==0.14.1
+scipy==1.10.1
+matplotlib==3.7.5
+seaborn==0.13.2
+openpyxl==3.1.5
