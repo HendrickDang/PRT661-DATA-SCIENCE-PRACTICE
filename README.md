@@ -27,6 +27,8 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 | --- | --- | --- |
 | `Updated_End_to_End_pipeline.py` | **Final code to run** | Full pipeline: ingest, panel build, EDA, PCA and regression. Produces the figures in Sections 4.1-4.5 of the report. |
 | `evaluation.py` | **Final** | Standalone forecast evaluation and benchmarking. Produces Section 4.6. Runs independently of the pipeline. |
+| `app.py` (+ `pages/`, `core_data.py`) | **Final** | Streamlit dual-role dashboard for PFES-facing briefing and technical model review. Requires the processed panel from the pipeline. |
+| `run_dashboard.bat` | Helper (Windows) | Launches `streamlit run app.py` using a local Anaconda install when available. |
 | `End to End pipeline.py` | Superseded | The original pipeline. Retained for contribution history. It contains three data leakage issues corrected in the file above, and does not run on Python 3.8. |
 | `End to End pipeline_Will fix.py` | Superseded | Earlier debugging copy. Not part of the current workflow. |
 
@@ -36,7 +38,7 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 pip install -r "Environment Setup Instructions/requirements.txt"
 ```
 
-Python 3.8 or newer. Versions are pinned in `requirements.txt` because XGBoost results are not reproducible across versions: the same `random_state` produces different trees, and team members on different versions obtained RMSE(/100k) of 80.3 and 84.5 for the same model. The figures in the report were produced with the pinned versions. Linear models are unaffected.
+Python 3.8 or newer for the pipeline and evaluation modules. The Streamlit dashboard packages (`streamlit`, `plotly`) need **Python 3.9+** (local demos use Anaconda 3.13). Versions are pinned in `requirements.txt` because XGBoost results are not reproducible across versions: the same `random_state` produces different trees, and team members on different versions obtained RMSE(/100k) of 80.3 and 84.5 for the same model. The figures in the report were produced with the pinned versions. Linear models are unaffected.
 
 ## Running the pipeline
 
@@ -66,6 +68,27 @@ What it does:
 
 Headline result: no single model dominates. XGBoost is most accurate at one month ahead (RMSE 90.7, skill 29.7% against the seasonal naive benchmark), while the 12-month moving average leads at 3, 6 and 12 months (RMSE 104.5, 105.7 and 110.5). Lasso performs worse than the seasonal naive benchmark at 12 months (skill -9.6%). The operational recommendation is a split specification: XGBoost at one month, moving average beyond.
 
+## Running the dashboard
+
+Prerequisite: run the pipeline at least once so `dataset/processed/nt_crime_merged_2015_2025.csv` exists.
+
+```bash
+streamlit run app.py
+```
+
+On Windows you can also double-click `run_dashboard.bat` after installing dependencies.
+
+The app opens at http://localhost:8501 with two roles:
+
+| Page | Audience | Contents |
+| --- | --- | --- |
+| **Administrator Portal** (`pages/1_Administrator_Portal.py`) | Policy / PFES / health and justice planners | KPIs, spatial demand map, staffing priority matrix, seasonal surge calendar, policy scenario simulator, briefing export |
+| **Data Science Workbench** (`pages/2_Data_Science_Workbench.py`) | Technical reviewers | Assumptions, EDA, PCA, feature selection and VIF, hyperparameter curves, Model A vs B, residual diagnostics, pipeline figure viewer |
+
+Shared loading and model training live in `core_data.py` (cached). Do **not** run files under `pages/` with `python` directly — Streamlit must start from `app.py` at the repo root so imports resolve.
+
+Note: the dashboard retrains the Model A/B suite from the processed panel for interactive inspection. Multi-horizon benchmarking and the operational split recommendation (XGBoost at one month, moving average beyond) are produced by `evaluation.py` and reported in Section 4.6; they are not yet rendered inside the portal.
+
 ## Why the pipeline selects V4 and the evaluation module selects V2
 
 This is a deliberate methodological difference, not an inconsistency.
@@ -86,6 +109,10 @@ Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100
 | `Outputs/` | Evaluation module results (E2, E4, E5) |
 | `eda_plots/` | 13 exploratory figures |
 | `regression_plots/` | 4 regression figures |
+| `app.py` | Streamlit landing page (role chooser + territory KPI banner) |
+| `pages/` | Administrator Portal and Data Science Workbench |
+| `core_data.py` | Shared data load, regression panel build, and cached model training for the dashboard |
+| `run_dashboard.bat` | Windows launcher for the Streamlit app |
 | `documents/` | Working documents and meeting minutes |
 | `diagrams/` | Architecture and workflow diagrams |
 | `Reports/` | Assessment reports |
