@@ -57,6 +57,15 @@ st.markdown("""
         line-height: 1.5;
         margin-bottom: 16px;
     }
+    /* Dark mode (Streamlit "System" theme uses prefers-color-scheme) */
+    @media (prefers-color-scheme: dark) {
+        .portal-title {
+            color: #90cdf4;
+        }
+        .portal-subtitle {
+            color: #a0aec0;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 

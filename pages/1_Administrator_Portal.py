@@ -55,6 +55,7 @@ st.markdown("""
         border-radius: 8px;
         padding: 16px 20px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        color: #1a202c;
     }
     .kpi-label {
         font-size: 0.85rem;
@@ -73,6 +74,7 @@ st.markdown("""
         padding: 12px 16px;
         border-radius: 4px;
         margin-bottom: 12px;
+        color: #742a2a;
     }
     .alert-elevated {
         background-color: #fffaf0;
@@ -80,6 +82,7 @@ st.markdown("""
         padding: 12px 16px;
         border-radius: 4px;
         margin-bottom: 12px;
+        color: #7b341e;
     }
     .alert-baseline {
         background-color: #f0fff4;
@@ -87,6 +90,16 @@ st.markdown("""
         padding: 12px 16px;
         border-radius: 4px;
         margin-bottom: 12px;
+        color: #22543d;
+    }
+    /* Dark mode (Streamlit "System" theme uses prefers-color-scheme) */
+    @media (prefers-color-scheme: dark) {
+        .admin-header {
+            color: #90cdf4;
+        }
+        .admin-sub {
+            color: #a0aec0;
+        }
     }
 </style>
 """, unsafe_allow_html=True)

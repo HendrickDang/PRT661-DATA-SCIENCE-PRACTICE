@@ -61,6 +61,15 @@ st.markdown("""
         padding: 12px;
         font-family: monospace;
     }
+    /* Dark mode (Streamlit "System" theme uses prefers-color-scheme) */
+    @media (prefers-color-scheme: dark) {
+        .ds-header {
+            color: #90cdf4;
+        }
+        .ds-sub {
+            color: #a0aec0;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
