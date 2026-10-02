@@ -1,0 +1,19 @@
+stage,item,rows,note
+S1 raw crime rows,nt_crime_statistics_2020-2023.csv,46036,years 2008-2023
+S2 inside 2015-2025 window,nt_crime_statistics_2020-2023.csv,26402,"dropped 19,634 rows outside the window"
+S1 raw crime rows,nt_crime_statistics_latest.csv,9110,years 2023-2026
+S2 inside 2015-2025 window,nt_crime_statistics_latest.csv,7904,"dropped 1,206 rows outside the window"
+S1 raw crime rows,TOTAL,55146,"figure quoted as '55,146 crime records' in the deck"
+S2 inside 2015-2025 window,TOTAL,34306,rows actually used by the pipeline
+S3 processed offence-level panel,nt_crime_merged_2015_2025.csv,13629,aggregated by region-month-offence type-flags
+S4 region-month observed cells,assault aggregate,786,131 months x 6 regions
+S5 complete region-month grid,regression grid,792,132 months x 6 regions (Jan 2015-Dec 2025)
+S6 dropped,lag-12 warm-up (first 12 months),72,Jan 2015 to Dec 2015
+S6 dropped,target missing (Nov 2023 systems gap),6,Nov 2023
+S6 dropped,lag1 points at the Nov 2023 gap,6,Dec 2023
+S6 dropped,lag3 points at the Nov 2023 gap,6,Feb 2024
+S6 dropped,lag12 points at the Nov 2023 gap,6,Nov 2024
+S7 usable model panel,after drops,696,116 usable months x 6 regions
+S8 train split,<= 2022,504,Jan 2016-Dec 2022 (84 months; 2015 is consumed by the lag-12 warm-up)
+S8 test split,>= 2023,192,Jan 2023-Dec 2025 (32 months; 4 months lost to the Nov 2023 gap)
+S8 provisional flag,last 6 months,36,"inside the test split; flagged, not dropped"

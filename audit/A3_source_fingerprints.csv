@@ -1,0 +1,7 @@
+file,rows,columns,year_span,header_issues,sha256
+nt-population-regions_1986-to-2025.xlsx,17280,7,1986-2025,none,fd6adabb226d27ea4aa2443eeed084041ad0d7e98cf572e1ad5f9cfad6dc33a8
+nt_crime_statistics_2020-2023.csv,46036,10,2008-2023,none,4ce8bad6d5b52425f8fa2513bdde8ec424397f1ee7e2346ef92e0a6a21b697f9
+nt_crime_statistics_latest.csv,9110,10,2023-2026,'Offence type ' vs 'Offence type' in older file; 'Reporting Region' vs 'Reporting region' in older file,f37c11dc5916059f5d9128eaf3371bb37bcf34fc7117d61424ba549f8ab4637b
+wholesale-alcohol-supply-by-quarter-2023.xlsx,28,12,quarterly (see Quarter Ending),none,050ae06102553b4b33915b5a70bf61fdda6fd162bf244e8e02fa4a1b9a690fa4
+wholesale-alcohol-supply-by-quarter-2024.xlsx,28,12,quarterly (see Quarter Ending),none,dc2ba196a3c5623e5b5f20e56b8dadf6eabd74f6c5fc6338d99697b9c3c17adc
+wholesale-alcohol-supply-by-quarter-2025.xlsx,28,12,quarterly (see Quarter Ending),none,e32bbe794db16fbf8a0bfbcc3df6c3d738d0df1ab12ca6b4042ef2e22196e767
