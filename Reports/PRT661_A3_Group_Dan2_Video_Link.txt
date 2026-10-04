@@ -1,0 +1,20 @@
+PRT661 Data Science Practice - Assessment 3
+Group Technical Demonstration and Professional Presentation
+
+Group: Dan2 - Theme 2
+Project: Forecasting Assault Rates Across NT Regions to Support Public Safety Resource Planning
+
+Group members:
+- Van Hoi Dang (Hendrick) - S395598
+- Thi Xuan Thanh Tran (Emma) - S389244
+- Ngoc Anh Nguyen (Will) - S386805
+- Le Nhat Minh Tran (Thomas) - [student ID]
+
+Group presentation video (20 minutes):
+https://www.youtube.com/watch?v=k0YfvX4aZKw
+
+GitHub repository:
+https://github.com/HendrickDang/PRT661-DATA-SCIENCE-PRACTICE
+
+Individual Work and Contribution Summary:
+See the attached PDF (two pages per student).
