@@ -1,0 +1,217 @@
+origin,target,h,Model,Region,actual,pred,actual_status
+2025-12,2026-01,1,Linear,Barkly,847.5,748.825321202337,provisional
+2025-12,2026-01,1,Linear,Big Rivers,529.6,529.2689970895112,provisional
+2025-12,2026-01,1,Linear,Central Australia,445.7,498.9557830758716,provisional
+2025-12,2026-01,1,Linear,East Arnhem,306.1,259.85463789406293,provisional
+2025-12,2026-01,1,Linear,Greater Darwin,207.5,219.47046330505114,provisional
+2025-12,2026-01,1,Linear,Top End,585.0,572.6610783013415,provisional
+2025-12,2026-01,1,Ridge (a=0.01),Barkly,847.5,748.8349471645668,provisional
+2025-12,2026-01,1,Ridge (a=0.01),Big Rivers,529.6,529.2984978602669,provisional
+2025-12,2026-01,1,Ridge (a=0.01),Central Australia,445.7,498.93444987226536,provisional
+2025-12,2026-01,1,Ridge (a=0.01),East Arnhem,306.1,259.86315928109707,provisional
+2025-12,2026-01,1,Ridge (a=0.01),Greater Darwin,207.5,219.45784704017868,provisional
+2025-12,2026-01,1,Ridge (a=0.01),Top End,585.0,572.6970292533058,provisional
+2025-12,2026-01,1,Lasso (a=0.01),Barkly,847.5,762.8476548615278,provisional
+2025-12,2026-01,1,Lasso (a=0.01),Big Rivers,529.6,533.057797091362,provisional
+2025-12,2026-01,1,Lasso (a=0.01),Central Australia,445.7,488.44312907452047,provisional
+2025-12,2026-01,1,Lasso (a=0.01),East Arnhem,306.1,277.7877580100886,provisional
+2025-12,2026-01,1,Lasso (a=0.01),Greater Darwin,207.5,201.56962241178144,provisional
+2025-12,2026-01,1,Lasso (a=0.01),Top End,585.0,617.4209343219276,provisional
+2025-12,2026-01,1,XGBoost,Barkly,847.5,632.2566528320312,provisional
+2025-12,2026-01,1,XGBoost,Big Rivers,529.6,466.5952453613281,provisional
+2025-12,2026-01,1,XGBoost,Central Australia,445.7,473.8611755371094,provisional
+2025-12,2026-01,1,XGBoost,East Arnhem,306.1,264.47027587890625,provisional
+2025-12,2026-01,1,XGBoost,Greater Darwin,207.5,198.6617431640625,provisional
+2025-12,2026-01,1,XGBoost,Top End,585.0,595.1762084960938,provisional
+2025-12,2026-01,1,Seasonal naive (t-12),Barkly,847.5,807.7,provisional
+2025-12,2026-01,1,Seasonal naive (t-12),Big Rivers,529.6,586.1,provisional
+2025-12,2026-01,1,Seasonal naive (t-12),Central Australia,445.7,617.3,provisional
+2025-12,2026-01,1,Seasonal naive (t-12),East Arnhem,306.1,345.2,provisional
+2025-12,2026-01,1,Seasonal naive (t-12),Greater Darwin,207.5,212.0,provisional
+2025-12,2026-01,1,Seasonal naive (t-12),Top End,585.0,622.9,provisional
+2025-12,2026-01,1,Moving average (12m),Barkly,847.5,866.2166666666667,provisional
+2025-12,2026-01,1,Moving average (12m),Big Rivers,529.6,588.9499999999999,provisional
+2025-12,2026-01,1,Moving average (12m),Central Australia,445.7,459.81666666666666,provisional
+2025-12,2026-01,1,Moving average (12m),East Arnhem,306.1,295.26666666666665,provisional
+2025-12,2026-01,1,Moving average (12m),Greater Darwin,207.5,207.26666666666665,provisional
+2025-12,2026-01,1,Moving average (12m),Top End,585.0,572.3666666666667,provisional
+2026-01,2026-02,1,Linear,Barkly,648.8,764.5183733493195,provisional
+2026-01,2026-02,1,Linear,Big Rivers,499.2,513.7607368319501,provisional
+2026-01,2026-02,1,Linear,Central Australia,469.5,444.33267923857454,provisional
+2026-01,2026-02,1,Linear,East Arnhem,293.1,234.98504602621793,provisional
+2026-01,2026-02,1,Linear,Greater Darwin,196.8,189.3261290228574,provisional
+2026-01,2026-02,1,Linear,Top End,297.9,488.24402686746066,provisional
+2026-01,2026-02,1,Ridge (a=0.01),Barkly,648.8,764.5896181087808,provisional
+2026-01,2026-02,1,Ridge (a=0.01),Big Rivers,499.2,513.7956518018108,provisional
+2026-01,2026-02,1,Ridge (a=0.01),Central Australia,469.5,444.32754312266337,provisional
+2026-01,2026-02,1,Ridge (a=0.01),East Arnhem,293.1,234.9983616532631,provisional
+2026-01,2026-02,1,Ridge (a=0.01),Greater Darwin,196.8,189.32323238163758,provisional
+2026-01,2026-02,1,Ridge (a=0.01),Top End,297.9,488.3007506057883,provisional
+2026-01,2026-02,1,Lasso (a=0.01),Barkly,648.8,877.8446716808534,provisional
+2026-01,2026-02,1,Lasso (a=0.01),Big Rivers,499.2,525.8245827208632,provisional
+2026-01,2026-02,1,Lasso (a=0.01),Central Australia,469.5,429.5719483994268,provisional
+2026-01,2026-02,1,Lasso (a=0.01),East Arnhem,293.1,252.88236234204678,provisional
+2026-01,2026-02,1,Lasso (a=0.01),Greater Darwin,196.8,190.4815968313269,provisional
+2026-01,2026-02,1,Lasso (a=0.01),Top End,297.9,539.0360042464616,provisional
+2026-01,2026-02,1,XGBoost,Barkly,648.8,771.8289794921875,provisional
+2026-01,2026-02,1,XGBoost,Big Rivers,499.2,494.6630554199219,provisional
+2026-01,2026-02,1,XGBoost,Central Australia,469.5,416.3851623535156,provisional
+2026-01,2026-02,1,XGBoost,East Arnhem,293.1,257.185302734375,provisional
+2026-01,2026-02,1,XGBoost,Greater Darwin,196.8,184.59971618652344,provisional
+2026-01,2026-02,1,XGBoost,Top End,297.9,466.554443359375,provisional
+2026-01,2026-02,1,Seasonal naive (t-12),Barkly,648.8,807.7,provisional
+2026-01,2026-02,1,Seasonal naive (t-12),Big Rivers,499.2,534.0,provisional
+2026-01,2026-02,1,Seasonal naive (t-12),Central Australia,469.5,474.3,provisional
+2026-01,2026-02,1,Seasonal naive (t-12),East Arnhem,293.1,254.0,provisional
+2026-01,2026-02,1,Seasonal naive (t-12),Greater Darwin,196.8,199.9,provisional
+2026-01,2026-02,1,Seasonal naive (t-12),Top End,297.9,552.5,provisional
+2026-01,2026-02,1,Moving average (12m),Barkly,648.8,869.5333333333333,provisional
+2026-01,2026-02,1,Moving average (12m),Big Rivers,499.2,584.2416666666667,provisional
+2026-01,2026-02,1,Moving average (12m),Central Australia,469.5,445.51666666666665,provisional
+2026-01,2026-02,1,Moving average (12m),East Arnhem,293.1,292.0083333333334,provisional
+2026-01,2026-02,1,Moving average (12m),Greater Darwin,196.8,206.89166666666665,provisional
+2026-01,2026-02,1,Moving average (12m),Top End,297.9,569.2083333333334,provisional
+2026-02,2026-03,1,Linear,Barkly,516.4,717.9846999968207,provisional
+2026-02,2026-03,1,Linear,Big Rivers,451.5,494.4760151203344,provisional
+2026-02,2026-03,1,Linear,Central Australia,414.7,459.3507772186909,provisional
+2026-02,2026-03,1,Linear,East Arnhem,221.5,233.2275612394184,provisional
+2026-02,2026-03,1,Linear,Greater Darwin,229.0,193.1849116609682,provisional
+2026-02,2026-03,1,Linear,Top End,308.8,372.9161850433887,provisional
+2026-02,2026-03,1,Ridge (a=0.01),Barkly,516.4,717.9985912397823,provisional
+2026-02,2026-03,1,Ridge (a=0.01),Big Rivers,451.5,494.48782488961,provisional
+2026-02,2026-03,1,Ridge (a=0.01),Central Australia,414.7,459.35936103458465,provisional
+2026-02,2026-03,1,Ridge (a=0.01),East Arnhem,221.5,233.23050694464345,provisional
+2026-02,2026-03,1,Ridge (a=0.01),Greater Darwin,229.0,193.18005252735338,provisional
+2026-02,2026-03,1,Ridge (a=0.01),Top End,308.8,372.9186574227852,provisional
+2026-02,2026-03,1,Lasso (a=0.01),Barkly,516.4,770.625201283424,provisional
+2026-02,2026-03,1,Lasso (a=0.01),Big Rivers,451.5,523.7709363256846,provisional
+2026-02,2026-03,1,Lasso (a=0.01),Central Australia,414.7,457.84501306128385,provisional
+2026-02,2026-03,1,Lasso (a=0.01),East Arnhem,221.5,254.16947259899175,provisional
+2026-02,2026-03,1,Lasso (a=0.01),Greater Darwin,229.0,192.51769193884957,provisional
+2026-02,2026-03,1,Lasso (a=0.01),Top End,308.8,386.0448134562697,provisional
+2026-02,2026-03,1,XGBoost,Barkly,516.4,755.7024536132812,provisional
+2026-02,2026-03,1,XGBoost,Big Rivers,451.5,571.7654418945312,provisional
+2026-02,2026-03,1,XGBoost,Central Australia,414.7,496.2156982421875,provisional
+2026-02,2026-03,1,XGBoost,East Arnhem,221.5,281.8762512207031,provisional
+2026-02,2026-03,1,XGBoost,Greater Darwin,229.0,208.73287963867188,provisional
+2026-02,2026-03,1,XGBoost,Top End,308.8,441.53045654296875,provisional
+2026-02,2026-03,1,Seasonal naive (t-12),Barkly,516.4,1072.6,provisional
+2026-02,2026-03,1,Seasonal naive (t-12),Big Rivers,451.5,720.6,provisional
+2026-02,2026-03,1,Seasonal naive (t-12),Central Australia,414.7,548.2,provisional
+2026-02,2026-03,1,Seasonal naive (t-12),East Arnhem,221.5,312.6,provisional
+2026-02,2026-03,1,Seasonal naive (t-12),Greater Darwin,229.0,210.7,provisional
+2026-02,2026-03,1,Seasonal naive (t-12),Top End,308.8,525.4,provisional
+2026-02,2026-03,1,Moving average (12m),Barkly,516.4,856.2916666666666,provisional
+2026-02,2026-03,1,Moving average (12m),Big Rivers,451.5,581.3416666666667,provisional
+2026-02,2026-03,1,Moving average (12m),Central Australia,414.7,445.1166666666666,provisional
+2026-02,2026-03,1,Moving average (12m),East Arnhem,221.5,295.2666666666667,provisional
+2026-02,2026-03,1,Moving average (12m),Greater Darwin,229.0,206.63333333333333,provisional
+2026-02,2026-03,1,Moving average (12m),Top End,308.8,547.9916666666667,provisional
+2026-03,2026-04,1,Linear,Barkly,516.4,611.5478802044383,provisional
+2026-03,2026-04,1,Linear,Big Rivers,447.1,439.8696930622875,provisional
+2026-03,2026-04,1,Linear,Central Australia,502.9,395.2589684485111,provisional
+2026-03,2026-04,1,Linear,East Arnhem,293.1,223.6351463373755,provisional
+2026-03,2026-04,1,Linear,Greater Darwin,205.0,205.2351369283488,provisional
+2026-03,2026-04,1,Linear,Top End,476.7,372.10850899655503,provisional
+2026-03,2026-04,1,Ridge (a=0.01),Barkly,516.4,611.5384303584331,provisional
+2026-03,2026-04,1,Ridge (a=0.01),Big Rivers,447.1,439.8980774693002,provisional
+2026-03,2026-04,1,Ridge (a=0.01),Central Australia,502.9,395.2695789648578,provisional
+2026-03,2026-04,1,Ridge (a=0.01),East Arnhem,293.1,223.6334726948211,provisional
+2026-03,2026-04,1,Ridge (a=0.01),Greater Darwin,205.0,205.22485403755712,provisional
+2026-03,2026-04,1,Ridge (a=0.01),Top End,476.7,372.11430993705693,provisional
+2026-03,2026-04,1,Lasso (a=0.01),Barkly,516.4,604.423981557377,provisional
+2026-03,2026-04,1,Lasso (a=0.01),Big Rivers,447.1,459.94086040467005,provisional
+2026-03,2026-04,1,Lasso (a=0.01),Central Australia,502.9,388.6994165871066,provisional
+2026-03,2026-04,1,Lasso (a=0.01),East Arnhem,293.1,232.41858615345615,provisional
+2026-03,2026-04,1,Lasso (a=0.01),Greater Darwin,205.0,198.1762440344772,provisional
+2026-03,2026-04,1,Lasso (a=0.01),Top End,476.7,389.0768885665845,provisional
+2026-03,2026-04,1,XGBoost,Barkly,516.4,645.3287353515625,provisional
+2026-03,2026-04,1,XGBoost,Big Rivers,447.1,442.7640686035156,provisional
+2026-03,2026-04,1,XGBoost,Central Australia,502.9,351.8236083984375,provisional
+2026-03,2026-04,1,XGBoost,East Arnhem,293.1,195.63424682617188,provisional
+2026-03,2026-04,1,XGBoost,Greater Darwin,205.0,201.02694702148438,provisional
+2026-03,2026-04,1,XGBoost,Top End,476.7,384.5075378417969,provisional
+2026-03,2026-04,1,Seasonal naive (t-12),Barkly,516.4,754.8,provisional
+2026-03,2026-04,1,Seasonal naive (t-12),Big Rivers,447.1,529.6,provisional
+2026-03,2026-04,1,Seasonal naive (t-12),Central Australia,502.9,386.1,provisional
+2026-03,2026-04,1,Seasonal naive (t-12),East Arnhem,293.1,306.1,provisional
+2026-03,2026-04,1,Seasonal naive (t-12),Greater Darwin,205.0,212.0,provisional
+2026-03,2026-04,1,Seasonal naive (t-12),Top End,476.7,541.7,provisional
+2026-03,2026-04,1,Moving average (12m),Barkly,516.4,809.9416666666667,provisional
+2026-03,2026-04,1,Moving average (12m),Big Rivers,447.1,558.9166666666666,provisional
+2026-03,2026-04,1,Moving average (12m),Central Australia,502.9,433.99166666666673,provisional
+2026-03,2026-04,1,Moving average (12m),East Arnhem,293.1,287.675,provisional
+2026-03,2026-04,1,Moving average (12m),Greater Darwin,205.0,208.15833333333333,provisional
+2026-03,2026-04,1,Moving average (12m),Top End,476.7,529.9416666666667,provisional
+2025-12,2026-03,3,Linear,Barkly,516.4,824.777771633982,provisional
+2025-12,2026-03,3,Linear,Big Rivers,451.5,540.9196688979654,provisional
+2025-12,2026-03,3,Linear,Central Australia,414.7,453.6652153181241,provisional
+2025-12,2026-03,3,Linear,East Arnhem,221.5,235.01176903638083,provisional
+2025-12,2026-03,3,Linear,Greater Darwin,229.0,206.24720923933072,provisional
+2025-12,2026-03,3,Linear,Top End,308.8,493.13830732764256,provisional
+2025-12,2026-03,3,Ridge (a=0.01),Barkly,516.4,824.7963889272643,provisional
+2025-12,2026-03,3,Ridge (a=0.01),Big Rivers,451.5,540.9555658920466,provisional
+2025-12,2026-03,3,Ridge (a=0.01),Central Australia,414.7,453.6417011136703,provisional
+2025-12,2026-03,3,Ridge (a=0.01),East Arnhem,221.5,235.02084130635532,provisional
+2025-12,2026-03,3,Ridge (a=0.01),Greater Darwin,229.0,206.2329813645224,provisional
+2025-12,2026-03,3,Ridge (a=0.01),Top End,308.8,493.17276977477945,provisional
+2025-12,2026-03,3,Lasso (a=0.01),Barkly,516.4,894.3251029792614,provisional
+2025-12,2026-03,3,Lasso (a=0.01),Big Rivers,451.5,564.9307286843108,provisional
+2025-12,2026-03,3,Lasso (a=0.01),Central Australia,414.7,444.6652288191772,provisional
+2025-12,2026-03,3,Lasso (a=0.01),East Arnhem,221.5,252.611584004429,provisional
+2025-12,2026-03,3,Lasso (a=0.01),Greater Darwin,229.0,188.4928935507774,provisional
+2025-12,2026-03,3,Lasso (a=0.01),Top End,308.8,528.8599271262385,provisional
+2025-12,2026-03,3,XGBoost,Barkly,516.4,799.1675415039062,provisional
+2025-12,2026-03,3,XGBoost,Big Rivers,451.5,650.693115234375,provisional
+2025-12,2026-03,3,XGBoost,Central Australia,414.7,447.7865295410156,provisional
+2025-12,2026-03,3,XGBoost,East Arnhem,221.5,288.5920715332031,provisional
+2025-12,2026-03,3,XGBoost,Greater Darwin,229.0,203.05262756347656,provisional
+2025-12,2026-03,3,XGBoost,Top End,308.8,604.9739379882812,provisional
+2025-12,2026-03,3,Seasonal naive (t-12),Barkly,516.4,1072.6,provisional
+2025-12,2026-03,3,Seasonal naive (t-12),Big Rivers,451.5,720.6,provisional
+2025-12,2026-03,3,Seasonal naive (t-12),Central Australia,414.7,548.2,provisional
+2025-12,2026-03,3,Seasonal naive (t-12),East Arnhem,221.5,312.6,provisional
+2025-12,2026-03,3,Seasonal naive (t-12),Greater Darwin,229.0,210.7,provisional
+2025-12,2026-03,3,Seasonal naive (t-12),Top End,308.8,525.4,provisional
+2025-12,2026-03,3,Moving average (12m),Barkly,516.4,866.2166666666667,provisional
+2025-12,2026-03,3,Moving average (12m),Big Rivers,451.5,588.9499999999999,provisional
+2025-12,2026-03,3,Moving average (12m),Central Australia,414.7,459.81666666666666,provisional
+2025-12,2026-03,3,Moving average (12m),East Arnhem,221.5,295.26666666666665,provisional
+2025-12,2026-03,3,Moving average (12m),Greater Darwin,229.0,207.26666666666665,provisional
+2025-12,2026-03,3,Moving average (12m),Top End,308.8,572.3666666666667,provisional
+2026-01,2026-04,3,Linear,Barkly,516.4,685.7517341382484,provisional
+2026-01,2026-04,3,Linear,Big Rivers,447.1,494.3986644001779,provisional
+2026-01,2026-04,3,Linear,Central Australia,502.9,414.8017591710037,provisional
+2026-01,2026-04,3,Linear,East Arnhem,293.1,227.70668077109045,provisional
+2026-01,2026-04,3,Linear,Greater Darwin,205.0,182.9991853546203,provisional
+2026-01,2026-04,3,Linear,Top End,476.7,450.5035540005562,provisional
+2026-01,2026-04,3,Ridge (a=0.01),Barkly,516.4,685.827725101318,provisional
+2026-01,2026-04,3,Ridge (a=0.01),Big Rivers,447.1,494.43667921793747,provisional
+2026-01,2026-04,3,Ridge (a=0.01),Central Australia,502.9,414.7942225032403,provisional
+2026-01,2026-04,3,Ridge (a=0.01),East Arnhem,293.1,227.7223385587986,provisional
+2026-01,2026-04,3,Ridge (a=0.01),Greater Darwin,205.0,182.99545014394772,provisional
+2026-01,2026-04,3,Ridge (a=0.01),Top End,476.7,450.56431535686727,provisional
+2026-01,2026-04,3,Lasso (a=0.01),Barkly,516.4,783.7732104462548,provisional
+2026-01,2026-04,3,Lasso (a=0.01),Big Rivers,447.1,502.3646093199145,provisional
+2026-01,2026-04,3,Lasso (a=0.01),Central Australia,502.9,391.8620368205789,provisional
+2026-01,2026-04,3,Lasso (a=0.01),East Arnhem,293.1,245.34082267663348,provisional
+2026-01,2026-04,3,Lasso (a=0.01),Greater Darwin,205.0,181.86287819290754,provisional
+2026-01,2026-04,3,Lasso (a=0.01),Top End,476.7,494.6310177907067,provisional
+2026-01,2026-04,3,XGBoost,Barkly,516.4,810.43701171875,provisional
+2026-01,2026-04,3,XGBoost,Big Rivers,447.1,580.896728515625,provisional
+2026-01,2026-04,3,XGBoost,Central Australia,502.9,343.1416931152344,provisional
+2026-01,2026-04,3,XGBoost,East Arnhem,293.1,207.38690185546875,provisional
+2026-01,2026-04,3,XGBoost,Greater Darwin,205.0,200.65707397460938,provisional
+2026-01,2026-04,3,XGBoost,Top End,476.7,466.59722900390625,provisional
+2026-01,2026-04,3,Seasonal naive (t-12),Barkly,516.4,754.8,provisional
+2026-01,2026-04,3,Seasonal naive (t-12),Big Rivers,447.1,529.6,provisional
+2026-01,2026-04,3,Seasonal naive (t-12),Central Australia,502.9,386.1,provisional
+2026-01,2026-04,3,Seasonal naive (t-12),East Arnhem,293.1,306.1,provisional
+2026-01,2026-04,3,Seasonal naive (t-12),Greater Darwin,205.0,212.0,provisional
+2026-01,2026-04,3,Seasonal naive (t-12),Top End,476.7,541.7,provisional
+2026-01,2026-04,3,Moving average (12m),Barkly,516.4,869.5333333333333,provisional
+2026-01,2026-04,3,Moving average (12m),Big Rivers,447.1,584.2416666666667,provisional
+2026-01,2026-04,3,Moving average (12m),Central Australia,502.9,445.51666666666665,provisional
+2026-01,2026-04,3,Moving average (12m),East Arnhem,293.1,292.0083333333334,provisional
+2026-01,2026-04,3,Moving average (12m),Greater Darwin,205.0,206.89166666666665,provisional
+2026-01,2026-04,3,Moving average (12m),Top End,476.7,569.2083333333334,provisional

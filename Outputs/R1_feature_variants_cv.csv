@@ -1,0 +1,5 @@
+Variant,CV_RMSE_log,Selected
+V1: Temporal,0.23526613471470129,False
+V2: + Region,0.21458485403043365,False
+V3: + Crime ctx,0.23230534963674096,False
+V4: Full (no PAC),0.20878790551276855,True
