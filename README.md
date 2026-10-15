@@ -27,6 +27,7 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 | --- | --- | --- |
 | `Updated_End_to_End_pipeline.py` | **Final code to run** | Full pipeline: ingest, panel build, EDA, PCA and regression. Produces the figures in Sections 4.1-4.5 of the report. |
 | `evaluation.py` | **Final** | Standalone forecast evaluation and benchmarking. Produces Section 4.6. Runs independently of the pipeline. |
+| `forecast.py` | **Final (Assessment 4)** | Forecasts for the next 1, 3, 6 and 12 months with 80% intervals, one saved model bundle per horizon, and a first out-of-sample check on January to April 2026. Run after `evaluation.py`. |
 | `app.py` (+ `pages/`, `core_data.py`) | **Final** | Streamlit dual-role dashboard for PFES-facing briefing and technical model review. Requires the processed panel from the pipeline. |
 | `run_dashboard.bat` | Helper (Windows) | Launches `streamlit run app.py` using a local Anaconda install when available. |
 | `End to End pipeline.py` | Superseded | The original pipeline. Retained for contribution history. It contains three data leakage issues corrected in the file above, and does not run on Python 3.8. |
@@ -38,7 +39,13 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 pip install -r "Environment Setup Instructions/requirements.txt"
 ```
 
-Python 3.8 or newer for the pipeline and evaluation modules. The Streamlit dashboard packages (`streamlit`, `plotly`) need **Python 3.9+** (local demos use Anaconda 3.13). Versions are pinned in `requirements.txt` because XGBoost results are not reproducible across versions: the same `random_state` produces different trees, and team members on different versions obtained RMSE(/100k) of 80.3 and 84.5 for the same model. The figures in the report were produced with the pinned versions. Linear models are unaffected.
+Python 3.8 or newer for the pipeline and evaluation modules. The Streamlit dashboard packages (`streamlit`, `plotly`) need **Python 3.9+** (local demos use Anaconda 3.13).
+
+### Reference environment
+
+Every figure quoted in this README, in `Outputs/` and in the Assessment 3 slides was produced in one environment: **Linux x86_64, Python 3.11, with the pinned versions in `requirements.txt`**. This is the environment of the Assessment 3 data audit (`audit/README.md`) and of Streamlit Community Cloud, where the dashboard is to be deployed. `Outputs/pipeline_run_summary.json` and `Outputs/forecast_run_summary.json` record the platform and package versions of the runs that wrote the tables. The evaluation and forecast outputs were also re-run on Python 3.8 with the same pins and matched byte for byte.
+
+Linear models reproduce exactly on any machine. XGBoost does not: with identical pinned versions it gives slightly different trees on Windows and on Linux (the audit measured a gap of up to 4 RMSE points), and different versions differ again. If your XGBoost figures are a few points away from the ones below, check the platform before suspecting the code.
 
 ## Running the pipeline
 
@@ -48,7 +55,11 @@ python Updated_End_to_End_pipeline.py
 
 Runs five stages in a single pass: ingest to `dataset/raw/`, panel build to `dataset/processed/`, EDA to `eda_plots/`, PCA, and the regression stage to `regression_plots/`.
 
-Headline result: XGBoost is the strongest model on the 2023-2025 held-out split, at RMSE 84.5 per 100,000 against 105.6 for Ridge and 106.0 for linear regression. Feature variant V4 is selected on log-scale cross-validation, and the tuned parameters are `max_depth=3, learning_rate=0.05, reg_alpha=1.0, reg_lambda=3.0`.
+The regression stage also writes its tables to `Outputs/` (`R1_feature_variants_cv.csv`, `R4_model_a_metrics.csv`, `R9_per_region_accuracy.csv`, `R10_model_b_metrics.csv`) so reports and slides quote files instead of console output.
+
+Headline result (single train/test split, train 2016-2022, test 2023-2025): XGBoost is the strongest model at RMSE 117.7 per 100,000, against 125.2 for linear regression and Ridge and 184.0 for Lasso. The gap between XGBoost and the linear models is about 6%. Feature variant V4 is selected on cross-validation, and the tuned XGBoost parameters are `max_depth=3, learning_rate=0.05, reg_alpha=1.0, reg_lambda=3.0`.
+
+Alcohol supply (Model B): on identical rows (train 2023-2024, 102 rows; test 2025, 72 rows), adding the previous quarter's wholesale supply per capita changes test RMSE by less than 1 per 100,000 for linear regression, Ridge and XGBoost. The coefficient is positive in every linear model (+0.06 to +0.14, standardised). The data show a small positive association and no measurable forecast gain.
 
 ## Running the evaluation module
 
@@ -56,17 +67,54 @@ Headline result: XGBoost is the strongest model on the 2023-2025 held-out split,
 python evaluation.py
 ```
 
-Writes its results to `Outputs/`. Independent of the pipeline.
+Writes its results to `Outputs/` and one figure to `regression_plots/`. Independent of the pipeline.
 
 What it does:
 
 - Seasonal naive and 12-month moving average baselines, so model performance is judged against a benchmark rather than only against other models
-- Rolling-origin backtesting with an expanding window at h = 1, 3, 6 and 12 months
-- Empirical prediction intervals from residual quantiles (realised coverage 78-80% against a nominal 80%)
-- Structural-break indicators for the SerPro transition and the ANZSOC reclassification
+- Rolling-origin backtesting at h = 1, 3, 6 and 12 months: an expanding window of at least 60 months, refitted every 3 months, with every month from June 2021 to June 2025 scored
+- Genuine horizons: a forecast made h months ahead uses no feature and no baseline value more recent than h months before the target
+- Empirical 80% prediction intervals from residual quantiles, with coverage measured out of sample (75-79%)
+- A paired bootstrap on the gap between the best model and the moving average
 - Metrics on the assault-rate scale, with provisional months excluded
 
-Headline result: no single model dominates. XGBoost is most accurate at one month ahead (RMSE 90.7, skill 29.7% against the seasonal naive benchmark), while the 12-month moving average leads at 3, 6 and 12 months (RMSE 104.5, 105.7 and 110.5). Lasso performs worse than the seasonal naive benchmark at 12 months (skill -9.6%). The operational recommendation is a split specification: XGBoost at one month, moving average beyond.
+Headline result: no single approach dominates.
+
+| Horizon | Lowest RMSE | RMSE per 100k | Next best |
+| --- | --- | ---: | --- |
+| 1 month | XGBoost | 99.8 | Moving average 107.3 |
+| 3 months | 12-month moving average | 116.3 | XGBoost 124.5 |
+| 6 months | 12-month moving average | 130.4 | XGBoost 139.3 |
+| 12 months | Seasonal naive | 145.5 | Moving average 150.8 |
+
+XGBoost's skill against the seasonal naive benchmark at one month is 27.4%. Its lead over the moving average at one month is 7.6 RMSE points; the bootstrap puts XGBoost ahead in 93% of resamples, and the 95% interval (-17.7 to +2.3) includes zero, so the lead is likely but not established. At 12 months every fitted model is worse than both naive benchmarks. The operational recommendation is a split specification: XGBoost at one month, the 12-month moving average at 3 and 6 months, and the seasonal naive value at 12 months.
+
+The same ranking holds when all horizons are scored on the same target months (`E4_backtest_metrics_common_window.csv`).
+
+## Running the forecast stage
+
+```bash
+python forecast.py
+```
+
+Run after the pipeline and `evaluation.py`: it reads the backtest tables to pick the method for each horizon. Takes about 30 seconds.
+
+What it does:
+
+- **F1 forecasts.** From the last month of the processed panel (December 2025) it forecasts every region 1, 3, 6 and 12 months ahead (January, March, June and December 2026). Each horizon uses the method with the lowest backtest RMSE and its empirical 80% interval: XGBoost at one month, the 12-month moving average at three and six months, the seasonal naive value at twelve. The other models' forecasts are written alongside for comparison. Saved to `Outputs/F1_forecasts.csv` and plotted in `regression_plots/R9_forecasts_2026.png`.
+- **Saved models.** One bundle per horizon in `Models/` (`forecast_h1.joblib` to `forecast_h12.joblib`), trained on every target month to December 2025 with the backtested set-up. The pipeline also saves Model A as `Models/model_a.joblib` [A21].
+- **E6 out-of-sample check.** The latest crime file (As At 1 June 2026) already contains January to April 2026, which the processed panel stops short of because population figures end in 2025. No model has seen these months. The saved models are kept frozen and scored on them: four target months at one month ahead, two at three months, six regions each. Rates use the 2025 population [A22].
+
+Headline result on the 2026 months (RMSE per 100,000, provisional actuals):
+
+| Horizon | Linear / Ridge | XGBoost | Moving average | Seasonal naive | n |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 month | 80.5 | 103.8 | 135.0 | 166.7 | 24 |
+| 3 months | 123.6 | 171.0 | 176.6 | 211.5 | 12 |
+
+All four fitted models beat both benchmarks on these months, and the linear models beat XGBoost at both horizons. XGBoost's one-month error (103.8) is close to its backtest error (99.8), but its 80% interval covered only 15 of 24 outcomes (62.5%). Every method forecasts above the outcome on average, which is expected: all 2026 months are within six months of the As At date, so the counts are provisional and will rise [A23]. With four months and six regions, this check cannot overturn the four-year backtest. It is the first data point for the monitoring stage, which should re-score these months once they are final.
+
+`F1_forecasts.csv` has one row per origin, horizon, region and model, with `Recommended = True` on the method to show and `Lower_80` / `Upper_80` filled for that method. The dashboard can read it directly to show the multi-horizon view.
 
 ## Running the dashboard
 
@@ -87,17 +135,15 @@ The app opens at http://localhost:8501 with two roles:
 
 Shared loading and model training live in `core_data.py` (cached). Do **not** run files under `pages/` with `python` directly — Streamlit must start from `app.py` at the repo root so imports resolve.
 
-Note: the dashboard retrains the Model A/B suite from the processed panel for interactive inspection. Multi-horizon benchmarking and the operational split recommendation (XGBoost at one month, moving average beyond) are produced by `evaluation.py` and reported in Section 4.6; they are not yet rendered inside the portal.
+Note: the dashboard retrains the Model A/B suite from the processed panel for interactive inspection, with the same features and tuning rules as the pipeline. The policy scenario simulator is illustrative: its pass-through factors are assumptions, not estimates. Multi-horizon benchmarking and the operational split recommendation (XGBoost at one month, simple benchmarks beyond) are produced by `evaluation.py`, and the resulting forecasts with 80% intervals by `forecast.py` (`Outputs/F1_forecasts.csv`).
 
-## Why the pipeline selects V4 and the evaluation module selects V2
+## Feature selection in the pipeline and in the evaluation module
 
-This is a deliberate methodological difference, not an inconsistency.
+The pipeline computes cross-validated RMSE on the log scale, which is the objective the models are fitted against. The evaluation module back-transforms and computes it on the assault rate per 100,000. Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100,000 and Greater Darwin at roughly 210 carry equal weight. Rate-scale error measures absolute accuracy, so high-rate regions dominate.
 
-The pipeline computes cross-validated RMSE on the log scale, which is the objective the models are fitted against. On that scale V4 wins (0.1794 against 0.2146). The evaluation module back-transforms predictions and computes the same statistic on the assault rate per 100,000, and on that scale V2 wins (85.1 against 107.6).
+Both scales now select **V4** (temporal features, region effects and the previous month's alcohol- and DV-flagged assault counts): 0.2088 against 0.2146 for V2 on the log scale, and 81.6 against 85.1 on the rate scale.
 
-The ranking is stable under both configurations: V4 leads on the log scale and V2 leads on the rate scale, whether cross-validation is restricted to the training period or run over the full panel. The divergence is driven by the choice of scale alone.
-
-Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100,000 and Greater Darwin at roughly 210 carry equal weight. Rate-scale error measures absolute accuracy, so high-rate regions dominate. Both are legitimate. The project keeps both, on the principle that a model should be selected on the same metric its results are reported in. See Section 4.6 of the report.
+In Assessment 2 the two scales disagreed (V4 on the log scale, V2 on the rate scale). That disagreement came from the crime-context features being taken from the same month as the target, which is corrected under [A18]. See `CHANGELOG.md`.
 
 ## Repository layout
 
@@ -106,9 +152,10 @@ Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100
 | `dataset/source/` | Raw source files, stored untouched. All corrections happen in code. |
 | `dataset/raw/` | Ingested copies plus `manifest.json` |
 | `dataset/processed/` | Merged panel, `nt_crime_merged_2015_2025.csv` (13,629 rows x 44 cols) |
-| `Outputs/` | Evaluation module results (E2, E4, E5) |
+| `Outputs/` | Result tables: pipeline (R1, R4, R9, R10, run summary), evaluation module (E2, E4, E5) and forecast stage (F1, E6, run summary) |
+| `Models/` | Saved model bundles: `model_a.joblib` (pipeline) and `forecast_h1/3/6/12.joblib` (forecast stage). See `Models/README.md` |
 | `eda_plots/` | 13 exploratory figures |
-| `regression_plots/` | 4 regression figures |
+| `regression_plots/` | 8 regression and forecast figures (R1-R9) |
 | `app.py` | Streamlit landing page (role chooser + territory KPI banner) |
 | `pages/` | Administrator Portal and Data Science Workbench |
 | `core_data.py` | Shared data load, regression panel build, and cached model training for the dashboard |
@@ -116,6 +163,7 @@ Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100
 | `documents/` | Working documents and meeting minutes |
 | `diagrams/` | Architecture and workflow diagrams |
 | `Reports/` | Assessment reports |
+| `audit/` | Assessment 3 read-only data lineage, reproducibility and leakage audit |
 | `Environment Setup Instructions/` | Environment setup, including `requirements.txt` |
 | `Execution Instructions/` | Run instructions |
 | `CHANGELOG.md` | Change log: all changes since Assessment 1, with justification |
@@ -131,10 +179,17 @@ Log-scale error measures proportional accuracy, so Barkly at roughly 850 per 100
 - **PROMIS to SerPro transition (Nov/Dec 2023).** Recording system change; series either side is not strictly comparable.
 - **ANZSOC reclassification (April 2025).** Offence categories were redefined.
 - **November 2023 missing** from both crime files - a genuine gap at the systems changeover.
-- **Provisional months.** The most recent months are understated because incidents continue to be recorded after publication. Six trailing months are excluded from evaluation.
-- **Alcohol supply data** is quarterly, starts in 2023, and is published roughly three months in arrears, so any specification using it is fitted on a much shorter window than the main models.
+- **Provisional months.** The most recent months are understated because incidents continue to be recorded after publication. The six trailing months are flagged. They are excluded from the rolling-origin backtest; they remain inside the test period of the single train/test split, where `R4_model_a_metrics.csv` reports the error with and without them.
+- **Alcohol supply data** is quarterly, starts in 2023, and is published roughly three months in arrears. Any specification using it is fitted on a much shorter window than the main models, and the supply of the quarter being forecast is not available in time, which is why Model B is tested with the previous quarter's figure [A19].
+- **Single-split figures are one-step-ahead.** The 2023-2025 test in the pipeline uses the actual assault rate of the previous month as a feature at every test month. It measures one-month-ahead accuracy with parameters frozen at the end of 2022. Longer horizons are measured only by `evaluation.py`.
+- **2026 months are provisional.** The January to April 2026 counts used by `forecast.py` are all within six months of the As At date and will be revised upward. Rates for 2026 use the 2025 population [A22].
+- **Prediction intervals are pooled across regions.** One residual distribution per horizon is applied to every region, so the interval is wide for Greater Darwin (rate near 200) and narrow for Barkly (near 850). A region- or scale-specific interval is listed as future work.
 - **Six-region aggregation** was necessary to join the three sources onto a common geography, but it removes sub-regional variation that would be more useful operationally.
 
 ## Assumptions
 
-The pipeline carries a numbered assumption log ([A1] to [A17]) in its module docstring. Every non-obvious modelling or data decision is tagged there and referenced at the point in the code where it applies. [A15] to [A17] cover the three data leakage corrections made since Assessment 1.
+The pipeline carries a numbered assumption log ([A1] to [A21]) in its module docstring, and `forecast.py` adds [A22] and [A23] in its own. Every non-obvious modelling or data decision is tagged there and referenced at the point in the code where it applies. [A15] to [A17] cover the three data leakage corrections made for Assessment 2. [A18] and [A19] cover the two feature-timing corrections made for Assessment 3, and [A20] the result tables written to `Outputs/`. Assessment 4 adds:
+
+- [A21] Model A is saved to `Models/model_a.joblib` with its scaler and feature order. It loads only under the pinned package versions.
+- [A22] 2026 assault rates use each region's 2025 population, the latest published.
+- [A23] The 2026 months are provisional, so `forecast.py` reports bias alongside error and treats the check as an early warning, not a final score.

@@ -17,6 +17,8 @@ pip install -r "Environment Setup Instructions/requirements.txt"
 
 Versions are pinned deliberately. XGBoost results are not reproducible across versions, so an unpinned install will produce different figures from those in the report. Linear models are unaffected.
 
+The reported figures were produced on Linux x86_64 with Python 3.11. With the same pinned versions, XGBoost on Windows differs by a few RMSE points. See "Reference environment" in the root `README.md`.
+
 ## 2. Check the source data is present
 
 The pipeline reads from `dataset/source/`, which is committed to the repository. Six files should be there:
@@ -46,7 +48,7 @@ Runs five stages in one pass. Takes a few minutes.
 | 2. Build panel | `dataset/processed/nt_crime_merged_2015_2025.csv` |
 | 3. EDA | `eda_plots/` (13 figures) |
 | 4. PCA | console output only |
-| 5. Regression | `regression_plots/` (4 figures), console tables |
+| 5. Regression | `regression_plots/` (6 figures), result tables in `Outputs/` (R1, R4, R9, R10, `pipeline_run_summary.json`) |
 
 To capture the console output for reference:
 
@@ -64,27 +66,60 @@ python Updated_End_to_End_pipeline.py > run_log.txt 2>&1
 python evaluation.py
 ```
 
-Independent of the pipeline; it builds its own panel from the processed dataset. Writes four files to `Outputs/`:
+Independent of the pipeline; it builds its own panel from the processed dataset. Writes six files to `Outputs/` and `R8_backtest_rmse_by_horizon.png` to `regression_plots/`:
 
 | File | Contents |
 | --- | --- |
 | `E2_variant_selection_cv.csv` | Feature variant comparison on training-period CV |
-| `E4_backtest_metrics.csv` | Forecast accuracy by model and horizon (Table 13) |
-| `E4_backtest_predictions.csv` | Per-origin backtest predictions |
-| `E5_prediction_intervals.csv` | Empirical prediction intervals and coverage |
+| `E4_backtest_metrics.csv` | Forecast accuracy by model and horizon |
+| `E4_backtest_metrics_common_window.csv` | The same table on the target months scored at every horizon |
+| `E4_backtest_paired_bootstrap.csv` | Best fitted model against the moving average, with a 95% interval |
+| `E4_backtest_predictions.csv` | Every backtest forecast, by origin, target, horizon, model and region |
+| `E5_prediction_intervals.csv` | 80% prediction intervals and out-of-sample coverage |
 
-Slower than the pipeline, because the rolling-origin backtest refits every model at each origin for four horizons.
+Takes well under a minute.
 
-## 5. Verify the output
+## 5. Run the forecast stage
+
+```bash
+python forecast.py
+```
+
+Run after steps 3 and 4: it reads `Outputs/E4_backtest_metrics.csv` and `Outputs/E5_prediction_intervals.csv` to choose the method and interval for each horizon. Writes:
+
+| File | Contents |
+| --- | --- |
+| `Outputs/F1_forecasts.csv` | Forecasts from December 2025 at 1, 3, 6 and 12 months for every region and model, with the 80% interval on the recommended method |
+| `Outputs/E6_holdout_2026_metrics.csv` | Frozen models scored on January to April 2026 (provisional actuals), with bias and interval coverage |
+| `Outputs/E6_holdout_2026_predictions.csv` | Every forecast behind that table |
+| `Outputs/forecast_run_summary.json` | Origin, data As At date, set-up and package versions |
+| `Models/forecast_h1.joblib` ... `forecast_h12.joblib` | One fitted model bundle per horizon |
+| `regression_plots/R9_forecasts_2026.png` | Forecasts with intervals against the 2026 provisional actuals |
+
+The pipeline (step 3) also writes `Models/model_a.joblib`. To load a saved bundle:
+
+```python
+import joblib, numpy as np
+bundle = joblib.load("Models/forecast_h1.joblib")
+model = bundle["models"]["XGBoost"]          # a fitted scikit-learn Pipeline
+rate = np.expm1(model.predict(X[bundle["features"]]))   # X: rows built like evaluation.horizon_frame
+```
+
+Saved models load only with the pinned versions in `requirements.txt` (including `joblib==1.4.2`).
+
+## 6. Verify the output
 
 The pipeline should end with `PIPELINE COMPLETE`. Key figures to check against the report:
 
 - Panel: 13,629 rows, 696 usable region-month observations after lag warm-up
-- Selected feature variant: V4 on log-scale CV
+- Selected feature variant: V4 (CV RMSE 0.2088 on the log scale)
 - Best XGBoost parameters: `max_depth=3, learning_rate=0.05, reg_alpha=1.0, reg_lambda=3.0`
-- XGBoost test RMSE: 84.5 per 100,000
+- Linear regression test RMSE: 125.2 per 100,000 (identical on every platform)
+- XGBoost test RMSE: 117.7 per 100,000 in the reference environment
 
-The evaluation module should report XGBoost best at h=1 (RMSE 90.7) and the 12-month moving average best at h=3, 6 and 12.
+The evaluation module should report XGBoost best at h=1 (RMSE 99.8), the 12-month moving average best at h=3 and h=6 (116.3 and 130.4), and the seasonal naive benchmark best at h=12 (145.5). The moving-average and seasonal-naive figures are identical on every platform.
+
+The forecast stage should print that 2025 rebuilt from the raw file matches the panel exactly, find 24 region-months after the panel (2026-01 to 2026-04), and report on those months an h=1 RMSE of 80.5 for linear regression and 103.8 for XGBoost.
 
 ## Troubleshooting
 
@@ -93,4 +128,4 @@ The evaluation module should report XGBoost best at h=1 (RMSE 90.7) and the 12-m
 | `ModuleNotFoundError: openpyxl` | Dependencies not installed; `openpyxl` is needed to read the `.xlsx` sources |
 | `TypeError: 'type' object is not subscriptable` | Running `End to End pipeline.py` on Python 3.8; use the nominated file instead |
 | `FileNotFoundError` in Stage 1 | Not running from the repository root, or `dataset/source/` is incomplete |
-| XGBoost figures differ from the report | `xgboost` version differs from the pin; check with `pip show xgboost` |
+| XGBoost figures differ from the report | `xgboost` version differs from the pin (check with `pip show xgboost`), or the run is not on Linux x86_64 |
