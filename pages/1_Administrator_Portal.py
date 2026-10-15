@@ -526,8 +526,10 @@ with tabs[4]:
     with sim_col2:
         st.markdown("##### 📊 Projected Operational Outcome")
 
-        # Feature vector
+        # Feature vector. The models use the PREVIOUS month's alcohol- and
+        # DV-flagged assault counts (pipeline [A18]); the simulator scales those.
         sin_m = np.sin(2 * np.pi * sim_month / 12)
+        cos_m = np.cos(2 * np.pi * sim_month / 12)
         model_feats = model_artifacts["features"]
         best_name = model_artifacts["best_name"]
         best_m = model_artifacts["results"][best_name]["model"]
@@ -535,11 +537,13 @@ with tabs[4]:
         # Predict with simulated policy curb
         feat_dict = {
             "sin_month": sin_m,
+            "cos_month": cos_m,
             "Season": is_wet,
             "assault_rate_lag1": sim_lag1,
+            "assault_rate_lag3": sim_lag1,
             "assault_rate_lag12": sim_lag1,
-            "Alcohol_offences": def_alc_off * (1.0 + (pac_curb / 100.0) * 0.4),
-            "DV_offences": def_dv_off * (1.0 + (pac_curb / 100.0) * 0.2),
+            "Alcohol_offences_lag1": def_alc_off * (1.0 + (pac_curb / 100.0) * 0.4),
+            "DV_offences_lag1": def_dv_off * (1.0 + (pac_curb / 100.0) * 0.2),
         }
         for r in REGION_ORDER:
             if r != "Greater Darwin":
@@ -555,11 +559,13 @@ with tabs[4]:
         # Predict baseline without policy curb
         feat_dict_base = {
             "sin_month": sin_m,
+            "cos_month": cos_m,
             "Season": is_wet,
             "assault_rate_lag1": sim_lag1,
+            "assault_rate_lag3": sim_lag1,
             "assault_rate_lag12": sim_lag1,
-            "Alcohol_offences": def_alc_off,
-            "DV_offences": def_dv_off,
+            "Alcohol_offences_lag1": def_alc_off,
+            "DV_offences_lag1": def_dv_off,
         }
         for r in REGION_ORDER:
             if r != "Greater Darwin":
@@ -583,6 +589,10 @@ with tabs[4]:
         if pac_curb < 0:
             st.markdown(f"🎉 **Estimated Harm Reduction**: **~{prevented_incidents:,} fewer assault victims** per month from the policy intervention.")
         st.markdown('</div>', unsafe_allow_html=True)
+        st.caption(
+            "Illustrative scenario only. The 0.4 and 0.2 pass-through factors are assumptions, "
+            "not estimates, and the model captures association rather than cause."
+        )
         st.write("")
 
         # Actionable Recommendation

@@ -25,13 +25,15 @@ PROCESSED_CSV = BASE_DIR / "dataset" / "processed" / "nt_crime_merged_2015_2025.
 RAW_POPULATION_CSV = BASE_DIR / "dataset" / "raw" / "population.csv"
 MANIFEST_JSON = BASE_DIR / "dataset" / "raw" / "manifest.json"
 
+# The pipeline writes to eda_plots/ and regression_plots/ at the repo root, so
+# those are read first. Visualizations/ holds older copies and is a fallback.
 EDA_PLOT_DIRS = [
-    BASE_DIR / "Visualizations" / "eda_plots",
     BASE_DIR / "eda_plots",
+    BASE_DIR / "Visualizations" / "eda_plots",
 ]
 REG_PLOT_DIRS = [
-    BASE_DIR / "Visualizations" / "regression_plots",
     BASE_DIR / "regression_plots",
+    BASE_DIR / "Visualizations" / "regression_plots",
 ]
 
 YEAR_MIN, YEAR_MAX = 2015, 2025
@@ -86,6 +88,11 @@ FEATURE_VARIANTS_BASE = [
     "sin_month", "cos_month", "Season",
     "assault_rate_lag1", "assault_rate_lag3", "assault_rate_lag12"
 ]
+
+# Pipeline [A18]: the alcohol/DV-flagged assault counts of the target month are
+# part of the target, so the models use the previous month's counts.
+CRIME_CONTEXT_SOURCE = ["Alcohol_offences", "DV_offences"]
+CRIME_CONTEXT = [f"{c}_lag1" for c in CRIME_CONTEXT_SOURCE]
 
 
 @st.cache_data(show_spinner="Loading harmonised dataset...")
@@ -170,6 +177,13 @@ def get_regression_panel(monthly_assault: pd.DataFrame, population: pd.DataFrame
     for lag in (1, 3, 12):
         panel[f"assault_rate_lag{lag}"] = panel.groupby("Region")["Assault_rate_100k"].shift(lag)
 
+    # [A18] previous month's crime-context counts
+    for col in CRIME_CONTEXT_SOURCE:
+        panel[f"{col}_lag1"] = panel.groupby("Region")[col].shift(1)
+    # [A19] wholesale supply of the previous quarter (PAC repeats over the three
+    # months of a quarter, so a 3-month shift is one quarter back)
+    panel["Total_PAC_prev_quarter"] = panel.groupby("Region")["Total_PAC"].shift(3)
+
     last = panel.loc[panel["Assault_offences"].notna(), "date"].max()
     panel["is_provisional"] = panel["date"] > (last - pd.DateOffset(months=6))
 
@@ -183,7 +197,8 @@ def get_regression_panel(monthly_assault: pd.DataFrame, population: pd.DataFrame
     dummy_cols = [c for c in panel.columns if c.startswith("Reg_")]
     train = panel[panel["Year"] <= 2022].copy()
     test = panel[panel["Year"] >= 2023].copy()
-    cv_frame = panel.sort_values(["date", "Region"]).reset_index(drop=True)
+    # Pipeline [A17]: tuning cross-validates over the training period only.
+    cv_frame = train.sort_values(["date", "Region"]).reset_index(drop=True)
 
     return panel, train, test, dummy_cols, cv_frame
 
@@ -194,8 +209,8 @@ def run_model_training(train: pd.DataFrame, test: pd.DataFrame, cv_frame: pd.Dat
     variants = {
         "V1: Temporal": FEATURE_VARIANTS_BASE,
         "V2: + Region": FEATURE_VARIANTS_BASE + dummy_cols,
-        "V3: + Crime ctx": FEATURE_VARIANTS_BASE + ["Alcohol_offences", "DV_offences"],
-        "V4: Full (no PAC)": (FEATURE_VARIANTS_BASE + ["Alcohol_offences", "DV_offences"] + dummy_cols),
+        "V3: + Crime ctx": FEATURE_VARIANTS_BASE + CRIME_CONTEXT,
+        "V4: Full (no PAC)": FEATURE_VARIANTS_BASE + CRIME_CONTEXT + dummy_cols,
     }
 
     cv_train = train.sort_values(["date", "Region"]).reset_index(drop=True)
@@ -318,9 +333,13 @@ def run_model_training(train: pd.DataFrame, test: pd.DataFrame, cv_frame: pd.Dat
 
     best_name = min(results, key=lambda k: results[k]["rmse"])
 
-    # Model B
-    panel_b = cv_frame[(cv_frame["Year"] >= min(ALCOHOL_YEARS)) & cv_frame["Total_PAC"].notna()].copy()
-    panel_b["alcohol_per_capita"] = panel_b["Total_PAC"] / panel_b["Total_population"]
+    # Model B - pipeline [A19], "previous quarter" specification: the supply
+    # figure precedes the target month, on the months where it exists.
+    full_panel = pd.concat([train, test], ignore_index=True)
+    panel_b = full_panel[(full_panel["Year"] >= min(ALCOHOL_YEARS))
+                         & full_panel["Total_PAC"].notna()
+                         & full_panel["Total_PAC_prev_quarter"].notna()].copy()
+    panel_b["alcohol_per_capita"] = panel_b["Total_PAC_prev_quarter"] / panel_b["Total_population"]
     features_b = features + ["alcohol_per_capita"]
     train_b = panel_b[panel_b["Year"] <= 2024]
     test_b = panel_b[panel_b["Year"] == YEAR_MAX]

@@ -7,6 +7,7 @@ End-to-end pipeline for the PRT661 NT assault forecasting project
     EDA         -> eda_plots/*.png
     PCA         -> age-structure components
     REGRESSION  -> regression_plots/*.png  (Model A and Model B)
+                -> Outputs/R*.csv + pipeline_run_summary.json (result tables)
 
 Ingest is the only stage that touches the raw downloads, so portal renames and
 Excel sheet names stay in one place. A missing source file stops the run before
@@ -54,14 +55,32 @@ ASSUMPTION LOG - the non-obvious decisions, referenced as [A#] in the code.
       XGBoost tuning never cross-validate over test rows. Note that the
       pipeline computes CV RMSE on the log scale, which is the model's fitting
       objective; evaluation.py back-transforms and computes it on the assault
-      rate scale. The two select different variants, and both are correct for
-      the question they ask - see Section 4.6.
+      rate scale. Before [A18] the two scales selected different variants
+      (V4 and V2). With the crime-context features lagged, both select V4.
+[A18] Alcohol_offences and DV_offences are counted from the assault rows of
+      the SAME region-month as the target, so they are a part of the number
+      being predicted (49% and 64% of it) and are not known when a forecast
+      is made. V3 and V4 therefore use the previous month's counts
+      (Alcohol_offences_lag1, DV_offences_lag1). Found by the Assessment 3
+      data audit (audit/README.md, Finding 3).
+[A19] Model B is reported twice. "Same quarter" uses the wholesale supply of
+      the quarter being predicted and measures association only: that figure
+      is published about three months later, so it cannot be used to forecast.
+      "Previous quarter" lags the supply one quarter and is the version to
+      read as a forecast test.
+[A20] Every table printed by the regression stage is also written to
+      Outputs/ (R1, R4, R9, R10) with a run summary recording the platform
+      and package versions, so slides and reports quote files, not consoles.
+[A21] The fitted Model A estimators are saved to Models/model_a.joblib with
+      the scaler and feature order (Assessment 4), so the dashboard can load
+      them instead of retraining. They load only under the pinned versions.
 ---------------------------------------------------------------------------
 """
 
 from __future__ import annotations
 
 import json
+import platform
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -90,6 +109,8 @@ RAW_DIR = BASE_DIR / "dataset" / "raw"
 PROCESSED_DIR = BASE_DIR / "dataset" / "processed"
 PLOT_DIR = BASE_DIR / "eda_plots"
 REG_PLOT_DIR = BASE_DIR / "regression_plots"
+OUTPUT_DIR = BASE_DIR / "Outputs"   # [A20] same folder evaluation.py writes to
+MODEL_DIR = BASE_DIR / "Models"     # [A21] saved model bundle
 
 YEAR_MIN, YEAR_MAX = 2015, 2025
 ALCOHOL_YEARS = (2023, 2024, 2025)
@@ -861,6 +882,10 @@ def run_pca(population: pd.DataFrame) -> None:
 FEATURE_VARIANTS_BASE = ["sin_month", "cos_month", "Season",
                          "assault_rate_lag1", "assault_rate_lag3", "assault_rate_lag12"]
 
+# [A18] crime-context features enter the models lagged one month.
+CRIME_CONTEXT_SOURCE = ["Alcohol_offences", "DV_offences"]
+CRIME_CONTEXT = [f"{c}_lag1" for c in CRIME_CONTEXT_SOURCE]
+
 
 def build_regression_panel(monthly_assault: pd.DataFrame,
                            population: pd.DataFrame) -> pd.DataFrame:
@@ -899,6 +924,15 @@ def build_regression_panel(monthly_assault: pd.DataFrame,
         panel[f"assault_rate_lag{lag}"] = (panel.groupby("Region")["Assault_rate_100k"]
                                            .shift(lag))
 
+    # [A18] previous month's alcohol/DV-flagged assault counts. The same-month
+    # counts are part of the target and are not known at forecast time.
+    for col in CRIME_CONTEXT_SOURCE:
+        panel[f"{col}_lag1"] = panel.groupby("Region")[col].shift(1)
+
+    # [A19] wholesale supply of the previous quarter. PAC is attached to all
+    # three months of its quarter [A6], so a 3-month shift is one quarter back.
+    panel["Total_PAC_prev_quarter"] = panel.groupby("Region")["Total_PAC"].shift(3)
+
     # [A9] flag the most recent 6 months rather than dropping them
     last = panel.loc[panel["Assault_offences"].notna(), "date"].max()
     panel["is_provisional"] = panel["date"] > (last - pd.DateOffset(months=6))
@@ -910,10 +944,29 @@ def build_regression_panel(monthly_assault: pd.DataFrame,
     required = ["log_assault_rate"] + [f"assault_rate_lag{l}" for l in (1, 3, 12)]
     before = len(panel)
     panel = panel.dropna(subset=required).reset_index(drop=True)
+    leftover = int(panel[CRIME_CONTEXT].isna().sum().sum())
+    if leftover:
+        raise ValueError(f"{leftover} missing lagged crime-context values remain "
+                         f"after the lag warm-up; check the [A3] gap handling.")
     print(f"[regression] usable rows after lag warm-up and gap removal: "
           f"{len(panel)} (dropped {before - len(panel)})")
     print(f"[regression] provisional rows flagged ([A9]): {panel['is_provisional'].sum()}")
     return panel
+
+
+# [A20] run facts collected as the stage executes, written at the end.
+RUN_SUMMARY: dict = {}
+
+
+def _write_table(df: pd.DataFrame, name: str) -> None:
+    """Write a result table to Outputs/ so reports quote a file, not a console."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    write_csv(df, OUTPUT_DIR / name)
+    print(f"  saved: Outputs/{name}")
+
+
+def _rate_rmse(y_log: np.ndarray, pred_log: np.ndarray) -> float:
+    return float(np.sqrt(mean_squared_error(np.expm1(y_log), np.expm1(pred_log))))
 
 
 def cv_rmse_for_features(model, cv_frame: pd.DataFrame, features: list[str]) -> float:
@@ -976,9 +1029,8 @@ def evaluate_feature_variants(train: pd.DataFrame,
     variants = {
         "V1: Temporal": FEATURE_VARIANTS_BASE,
         "V2: + Region": FEATURE_VARIANTS_BASE + dummy_cols,
-        "V3: + Crime ctx": FEATURE_VARIANTS_BASE + ["Alcohol_offences", "DV_offences"],
-        "V4: Full (no PAC)": (FEATURE_VARIANTS_BASE
-                              + ["Alcohol_offences", "DV_offences"] + dummy_cols),
+        "V3: + Crime ctx": FEATURE_VARIANTS_BASE + CRIME_CONTEXT,       # [A18]
+        "V4: Full (no PAC)": FEATURE_VARIANTS_BASE + CRIME_CONTEXT + dummy_cols,
     }
 
     # TimeSeriesSplit needs calendar order; restrict to the training period.
@@ -994,6 +1046,12 @@ def evaluate_feature_variants(train: pd.DataFrame,
     best_variant = min(variant_rmse, key=variant_rmse.get)
     FEATURES = variants[best_variant]
     print(f"   -> best variant: {best_variant} (RMSE={variant_rmse[best_variant]:.4f})")
+    _write_table(pd.DataFrame({
+        "Variant": list(variant_rmse),
+        "CV_RMSE_log": list(variant_rmse.values()),
+        "Selected": [name == best_variant for name in variant_rmse],
+    }), "R1_feature_variants_cv.csv")
+    RUN_SUMMARY["selected_variant"] = best_variant
 
     # plot
     fig, ax = plt.subplots(figsize=(9, 4))
@@ -1227,6 +1285,10 @@ def train_final_models(train: pd.DataFrame,
         ),
     }
 
+    # [A9] the provisional months sit inside the test split. Report the error
+    # with and without them so the effect of late reporting is visible.
+    settled = (~test["is_provisional"]).to_numpy()
+
     results = {}
     print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)':<14}{'CV RMSE'}")
 
@@ -1253,6 +1315,7 @@ def train_final_models(train: pd.DataFrame,
             "rmse": rmse_log,
             "mae": mae_log,
             "rmse_rate": rmse_rate,
+            "rmse_rate_settled": _rate_rmse(y_test[settled], pred[settled]),
             "cv": cv,
         }
 
@@ -1263,7 +1326,73 @@ def train_final_models(train: pd.DataFrame,
     best_name = min(results, key=lambda k: results[k]["rmse"])
     print(f"   -> best model (Test RMSE): {best_name}")
 
+    save_model_a(results, scaler, FEATURES, len(train))
+
+    _write_table(pd.DataFrame([{
+        "Model": name,
+        "RMSE_log": r["rmse"],
+        "MAE_log": r["mae"],
+        "RMSE_per_100k": r["rmse_rate"],
+        "RMSE_per_100k_excl_provisional": r["rmse_rate_settled"],
+        "CV_RMSE_log": r["cv"],
+        "Train_rows": len(train),
+        "Test_rows": len(test),
+        "Best": name == best_name,
+    } for name, r in results.items()]), "R4_model_a_metrics.csv")
+    plot_model_comparison(results, best_name)
+    RUN_SUMMARY.update(features=list(FEATURES), ridge_alpha=best_ridge,
+                       lasso_alpha=best_lasso, xgboost_params=best_xgb_params,
+                       best_model=best_name)
+
     return results, best_name
+
+
+def save_model_a(results: dict, scaler: StandardScaler, FEATURES: list[str],
+                 train_rows: int) -> None:
+    """[A21] Persist the fitted Model A estimators so the dashboard and
+    reviewers can load them without re-running the pipeline.
+
+    One file holds every model plus the scaler the linear models need and the
+    feature order. XGBoost was fitted on unscaled features, so it must be fed
+    the raw columns. Loading needs the same pinned package versions.
+    """
+    import joblib
+    import sklearn
+    import xgboost
+
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    bundle = {
+        "models": {name: r["model"] for name, r in results.items()},
+        "scaler_for_linear_models": scaler,
+        "features": list(FEATURES),
+        "target": "log1p(assault rate per 100,000)",
+        "train_rows": train_rows,
+        "train_period": "2016-2022",
+        "versions": {"scikit_learn": sklearn.__version__,
+                     "xgboost": xgboost.__version__,
+                     "python": platform.python_version()},
+    }
+    out = MODEL_DIR / "model_a.joblib"
+    joblib.dump(bundle, out, compress=3)
+    print(f"  saved: Models/{out.name}")
+
+
+def plot_model_comparison(results: dict, best_name: str) -> None:
+    """R3 - Model A test RMSE on the rate scale, one bar per model."""
+    names = list(results)
+    values = [results[n]["rmse_rate"] for n in names]
+    fig, ax = plt.subplots(figsize=(8, 4.6))
+    bars = ax.bar(names, values, width=0.8, edgecolor="white",
+                  color=["#EF5350" if n == best_name else "#42A5F5" for n in names])
+    for bar, val in zip(bars, values):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:.1f}",
+                ha="center", va="bottom", fontsize=10, fontweight="bold")
+    ax.set(xlabel="Model", ylabel="RMSE per 100k population",
+           ylim=(0, max(values) * 1.15),
+           title=f"Model A - No Alcohol Supply\n(test 2023-{YEAR_MAX}, red = best)")
+    ax.grid(False)
+    fig.tight_layout()
+    _save(fig, "R3_model_comparison.png", REG_PLOT_DIR)
 
 
 # ============================================================
@@ -1366,6 +1495,7 @@ def per_region_predictions(test: pd.DataFrame,
     preds["Predicted_rate"] = pred_rate.round(1)
     preds["Error"] = preds["Predicted_rate"] - preds["Actual_rate"]
 
+    rows = []
     print(f"   {'Region':<20}{'Actual':>10}{'Predicted':>12}{'RMSE':>10}{'Err%':>10}")
     for region in REGION_ORDER:
         sub = preds[preds["Region"] == region]
@@ -1376,6 +1506,28 @@ def per_region_predictions(test: pd.DataFrame,
         print(f"   {region:<20}{sub['Actual_rate'].mean():>10.1f}"
               f"{sub['Predicted_rate'].mean():>12.1f}"
               f"{rmse:>10.1f}{err_pct:>10.1f}")
+        rows.append({"Model": best_name, "Region": region,
+                     "Mean_actual_rate": sub["Actual_rate"].mean(),
+                     "Mean_predicted_rate": sub["Predicted_rate"].mean(),
+                     "RMSE_per_100k": rmse, "Mean_error_%": err_pct,
+                     "Test_months": len(sub)})
+    table = pd.DataFrame(rows)
+    _write_table(table, "R9_per_region_accuracy.csv")
+
+    # R7 - per-region RMSE, largest at the top
+    ordered = table.sort_values("RMSE_per_100k")
+    fig, ax = plt.subplots(figsize=(8, 4.6))
+    colours = dict(zip(REGION_ORDER, palette))
+    bars = ax.barh(ordered["Region"], ordered["RMSE_per_100k"],
+                   color=[colours[r] for r in ordered["Region"]])
+    for bar, val in zip(bars, ordered["RMSE_per_100k"]):
+        ax.text(bar.get_width() + 1.5, bar.get_y() + bar.get_height() / 2,
+                f"{val:.1f}", va="center", fontsize=9)
+    ax.set(xlabel=f"RMSE per 100k - {best_name}",
+           xlim=(0, ordered["RMSE_per_100k"].max() * 1.12),
+           title=f"Per-Region Accuracy ({best_name})")
+    fig.tight_layout()
+    _save(fig, "R7_per_region_rmse.png", REG_PLOT_DIR)
 
 
 # ---------- R10: Model B with alcohol supply --------------------------------
@@ -1385,97 +1537,154 @@ def model_b_with_alcohol(panel: pd.DataFrame,
                          best_ridge: float,
                          best_lasso: float,
                          best_xgb_params: dict) -> None:
-    print(f"\n-- R10: Model B - with alcohol supply "
-          f"(train {min(ALCOHOL_YEARS)}-2024, test {YEAR_MAX}) [A12] --")
+    """Model B: the Model A features plus per-capita wholesale alcohol supply.
 
-    # Filter panel for alcohol supply years
-    panel_b = panel[(panel["Year"] >= min(ALCOHOL_YEARS)) & panel["Total_PAC"].notna()].copy()
-    panel_b["alcohol_per_capita"] = panel_b["Total_PAC"] / panel_b["Total_population"]
+    [A19] Three specifications are fitted on IDENTICAL rows, so the only thing
+    that differs between them is the alcohol feature:
+      - "none"             the Model A features alone, on the Model B window.
+                           Model A itself is fitted on 2015-2022, so its error
+                           cannot be compared with Model B's [A12]; this row can.
+      - "same quarter"     supply of the quarter being predicted. Association
+                           only: that figure is not published in time to forecast.
+      - "previous quarter" supply of the quarter before. The forecast test.
+    """
+    specs = [
+        ("none", None, None),
+        ("same quarter", "Total_PAC", "alcohol_per_capita"),
+        ("previous quarter", "Total_PAC_prev_quarter", "alcohol_per_capita_prev_quarter"),
+    ]
+    rows = []
 
-    # Add alcohol_per_capita to feature list
-    features_b = FEATURES + ["alcohol_per_capita"]
+    # Common sample: months where both supply figures exist. The first quarter
+    # of 2023 has no previous quarter, so it drops out for every specification.
+    common = panel[(panel["Year"] >= min(ALCOHOL_YEARS))
+                   & panel["Total_PAC"].notna()
+                   & panel["Total_PAC_prev_quarter"].notna()].copy()
 
-    train_b = panel_b[panel_b["Year"] <= 2024]
-    test_b = panel_b[panel_b["Year"] == YEAR_MAX]
+    for spec_name, pac_col, feature in specs:
+        print(f"\n-- R10: Model B - alcohol supply: {spec_name} "
+              f"(train {min(ALCOHOL_YEARS)}-2024, test {YEAR_MAX}) [A12][A19] --")
 
-    if len(train_b) <= 5 or test_b.empty:
-        print("   insufficient data for Model B.")
-        return
-
-    y_train_b = train_b["log_assault_rate"].to_numpy(float)
-    y_test_b = test_b["log_assault_rate"].to_numpy(float)
-
-    # Linear models use scaled features
-    scaler_b = StandardScaler()
-    x_train_b = scaler_b.fit_transform(train_b[features_b].astype(float))
-    x_test_b = scaler_b.transform(test_b[features_b].astype(float))
-
-    # XGBoost uses raw features
-    X_train_raw = train_b[features_b].astype(float)
-    X_test_raw = test_b[features_b].astype(float)
-
-    print(f"   train {len(train_b)} rows | test {len(test_b)} rows")
-    print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)'}")
-
-    results_b: dict[str, dict] = {}
-
-    # Linear models
-    linear_models = {
-        "Linear Regression": LinearRegression(),
-        f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
-        f"Lasso (a={best_lasso})": Lasso(alpha=best_lasso, max_iter=10000),
-    }
-
-    for name, model in linear_models.items():
-        model.fit(x_train_b, y_train_b)
-        pred = model.predict(x_test_b)
-        rmse = float(np.sqrt(mean_squared_error(y_test_b, pred)))
-        mae = float(mean_absolute_error(y_test_b, pred))
-        rmse_rate = float(np.sqrt(mean_squared_error(np.expm1(y_test_b),
-                                                     np.expm1(pred))))
-        results_b[name] = {
-            "rmse": rmse,
-            "mae": mae,
-            "rmse_rate": rmse_rate,
-            "coef": dict(zip(features_b, model.coef_)),
-        }
-        print(f"   {name:<22}{rmse:<12.4f}{mae:<12.4f}{rmse_rate:.1f}")
-
-    # XGBoost model
-    xgb_model = XGBRegressor(
-        n_estimators=800,
-        subsample=0.9,
-        colsample_bytree=0.9,
-        min_child_weight=1,
-        objective="reg:squarederror",
-        random_state=42,
-        **best_xgb_params
-    )
-
-    xgb_model.fit(X_train_raw, y_train_b)
-    xgb_pred = xgb_model.predict(X_test_raw)
-
-    xgb_rmse = float(np.sqrt(mean_squared_error(y_test_b, xgb_pred)))
-    xgb_mae = float(mean_absolute_error(y_test_b, xgb_pred))
-    xgb_rmse_rate = float(np.sqrt(mean_squared_error(np.expm1(y_test_b),
-                                                     np.expm1(xgb_pred))))
-
-    results_b["XGBoost"] = {
-        "rmse": xgb_rmse,
-        "mae": xgb_mae,
-        "rmse_rate": xgb_rmse_rate,
-        "coef": None  # trees don't have linear coefficients
-    }
-
-    print(f"   {'XGBoost':<22}{xgb_rmse:<12.4f}{xgb_mae:<12.4f}{xgb_rmse_rate:.1f}")
-
-    # Alcohol_per_capita coefficient (linear only)
-    print("   standardised alcohol_per_capita coefficient:")
-    for name, r in results_b.items():
-        if r["coef"] is not None:
-            print(f"      {name:<22}{r['coef']['alcohol_per_capita']:+.4f}")
+        panel_b = common.copy()
+        if feature is None:
+            features_b = list(FEATURES)
         else:
-            print(f"      {name:<22}N/A (tree model)")
+            panel_b[feature] = panel_b[pac_col] / panel_b["Total_population"]
+            features_b = FEATURES + [feature]
+
+        train_b = panel_b[panel_b["Year"] <= 2024]
+        test_b = panel_b[panel_b["Year"] == YEAR_MAX]
+
+        if len(train_b) <= 5 or test_b.empty:
+            print("   insufficient data for Model B.")
+            continue
+
+        y_train_b = train_b["log_assault_rate"].to_numpy(float)
+        y_test_b = test_b["log_assault_rate"].to_numpy(float)
+
+        # Linear models use scaled features
+        scaler_b = StandardScaler()
+        x_train_b = scaler_b.fit_transform(train_b[features_b].astype(float))
+        x_test_b = scaler_b.transform(test_b[features_b].astype(float))
+
+        # XGBoost uses raw features
+        X_train_raw = train_b[features_b].astype(float)
+        X_test_raw = test_b[features_b].astype(float)
+
+        print(f"   train {len(train_b)} rows | test {len(test_b)} rows")
+        print(f"   {'Model':<22}{'RMSE(log)':<12}{'MAE(log)':<12}{'RMSE(/100k)'}")
+
+        results_b: dict[str, dict] = {}
+
+        linear_models = {
+            "Linear Regression": LinearRegression(),
+            f"Ridge (a={best_ridge})": Ridge(alpha=best_ridge),
+            f"Lasso (a={best_lasso})": Lasso(alpha=best_lasso, max_iter=10000),
+        }
+
+        for name, model in linear_models.items():
+            model.fit(x_train_b, y_train_b)
+            pred = model.predict(x_test_b)
+            results_b[name] = {
+                "rmse": float(np.sqrt(mean_squared_error(y_test_b, pred))),
+                "mae": float(mean_absolute_error(y_test_b, pred)),
+                "rmse_rate": _rate_rmse(y_test_b, pred),
+                "coef": (float(dict(zip(features_b, model.coef_))[feature])
+                         if feature else None),
+            }
+
+        xgb_model = XGBRegressor(
+            n_estimators=800,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            min_child_weight=1,
+            objective="reg:squarederror",
+            random_state=42,
+            **best_xgb_params
+        )
+        xgb_model.fit(X_train_raw, y_train_b)
+        xgb_pred = xgb_model.predict(X_test_raw)
+        results_b["XGBoost"] = {
+            "rmse": float(np.sqrt(mean_squared_error(y_test_b, xgb_pred))),
+            "mae": float(mean_absolute_error(y_test_b, xgb_pred)),
+            "rmse_rate": _rate_rmse(y_test_b, xgb_pred),
+            "coef": None,  # trees don't have linear coefficients
+        }
+
+        for name, r in results_b.items():
+            print(f"   {name:<22}{r['rmse']:<12.4f}{r['mae']:<12.4f}{r['rmse_rate']:.1f}")
+
+        if feature:
+            print(f"   standardised {feature} coefficient:")
+            for name, r in results_b.items():
+                if r["coef"] is not None:
+                    print(f"      {name:<22}{r['coef']:+.4f}")
+                else:
+                    print(f"      {name:<22}N/A (tree model)")
+
+        rows += [{
+            "Alcohol_supply": spec_name,
+            "Model": name,
+            "RMSE_log": r["rmse"],
+            "MAE_log": r["mae"],
+            "RMSE_per_100k": r["rmse_rate"],
+            "Alcohol_coefficient_standardised": r["coef"],
+            "Train_rows": len(train_b),
+            "Test_rows": len(test_b),
+        } for name, r in results_b.items()]
+
+    if rows:
+        _write_table(pd.DataFrame(rows), "R10_model_b_metrics.csv")
+
+
+def write_run_summary(panel: pd.DataFrame, train: pd.DataFrame,
+                      test: pd.DataFrame) -> None:
+    """[A20] Record what was run and where, next to the result tables.
+
+    XGBoost gives slightly different trees on different operating systems even
+    with identical package versions, so a figure is only reproducible when the
+    platform that produced it is known.
+    """
+    import sklearn
+    import xgboost
+
+    RUN_SUMMARY.update(
+        usable_rows=len(panel), train_rows=len(train), test_rows=len(test),
+        provisional_rows_in_test=int(test["is_provisional"].sum()),
+        environment={
+            "platform": f"{platform.system()} {platform.machine()}",
+            "python": platform.python_version(),
+            "pandas": pd.__version__,
+            "numpy": np.__version__,
+            "scikit_learn": sklearn.__version__,
+            "xgboost": xgboost.__version__,
+        },
+    )
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out = OUTPUT_DIR / "pipeline_run_summary.json"
+    out.write_text(json.dumps(RUN_SUMMARY, indent=2, default=str) + "\n",
+                   encoding="utf-8")
+    print(f"  saved: Outputs/{out.name}")
 
 
 
@@ -1508,6 +1717,7 @@ def run_regression(monthly_assault: pd.DataFrame,
     
 
     model_b_with_alcohol(panel, FEATURES, best_ridge, best_lasso, best_xgb_params)
+    write_run_summary(panel, train, test)
 
 # =============================================================================
 # ENTRY POINT
@@ -1525,6 +1735,8 @@ def main() -> None:
     print(f"  dataset/processed/   nt_crime_merged_2015_2025.csv")
     print(f"  eda_plots/           {len(list(PLOT_DIR.glob('*.png')))} figures")
     print(f"  regression_plots/    {len(list(REG_PLOT_DIR.glob('*.png')))} figures")
+    print(f"  Outputs/             result tables (R1, R4, R9, R10) + run summary")
+    print(f"  Models/              model_a.joblib (fitted Model A, [A21])")
 
 
 if __name__ == "__main__":

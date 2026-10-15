@@ -145,7 +145,7 @@ with ds_tabs[0]:
             st.info("Manifest file not found.")
 
     st.markdown("---")
-    st.markdown("##### Assumption Log Reference Table [A1 – A16]")
+    st.markdown("##### Assumption Log Reference Table [A1 – A20]")
     assumptions_data = [
         {"Code": "[A1]", "Name": "Historical Window", "Description": "Window fixed to 2015–2025; earlier records (from 2008) trimmed to avoid structural discontinuity."},
         {"Code": "[A2]", "Name": "ANZSOC Harmonisation", "Description": "Maps PROMIS offence categories to ANZSOC standards; unmapped categories throw an explicit error rather than silently becoming NaN."},
@@ -163,6 +163,10 @@ with ds_tabs[0]:
         {"Code": "[A14]", "Name": "PCA on Age Shares", "Description": "PCA uses age-group shares (percentages), not counts, preventing regional population size from dominating PC1 at >99%."},
         {"Code": "[A15]", "Name": "Pipeline Scaler", "Description": "StandardScaler fitted inside Pipeline on training folds only, preventing lookahead distribution leakage."},
         {"Code": "[A16]", "Name": "Leakage-Free Selection", "Description": "Feature variants selected using TimeSeriesSplit CV on the training partition only; held-out test set remained untouched until final evaluation."},
+        {"Code": "[A17]", "Name": "Training-Period Tuning", "Description": "Alpha and XGBoost tuning cross-validate over the training period only, never over test rows."},
+        {"Code": "[A18]", "Name": "Lagged Crime Context", "Description": "Alcohol- and DV-flagged assault counts enter the models lagged one month. The same-month counts are part of the target and are not known at forecast time."},
+        {"Code": "[A19]", "Name": "Alcohol Supply Timing", "Description": "Model B uses the wholesale supply of the previous quarter, because the current quarter's figure is published too late to forecast with."},
+        {"Code": "[A20]", "Name": "Result Tables on File", "Description": "Every regression table is written to Outputs/ with a run summary recording platform and package versions."},
     ]
     st.dataframe(pd.DataFrame(assumptions_data), hide_index=True, use_container_width=True)
 
@@ -403,8 +407,8 @@ with ds_tabs[5]:
     # Model B: Alcohol Supply Evaluation [A12]
     st.markdown("#### 🍷 Model B: Evaluating Wholesale Alcohol Supply (PAC) Marginal Skill [A12]")
     st.markdown(
-        "Trained on 2023–2024 and evaluated on 2025 to measure whether adding quarterly PAC per capita "
-        "improves out-of-sample forecast accuracy."
+        "Trained on 2023–2024 and evaluated on 2025 to measure whether adding the previous quarter's PAC per capita "
+        "improves out-of-sample forecast accuracy [A19]."
     )
     res_b = model_artifacts["results_b"]
     if res_b:
