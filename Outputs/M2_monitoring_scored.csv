@@ -1,0 +1,181 @@
+Target_month,Region,Horizon_months,Model,Origin,Actual_rate_100k,Forecast_rate_100k,Error_forecast_minus_actual,Inside_80_interval,Actual_status
+2025-01,Barkly,1,XGBoost,2024-12,807.7,658.8,-148.9,True,settled
+2025-01,Big Rivers,1,XGBoost,2024-12,586.1,596.7,10.6,True,settled
+2025-01,Central Australia,1,XGBoost,2024-12,617.3,615.6,-1.7,True,settled
+2025-01,East Arnhem,1,XGBoost,2024-12,345.2,265.8,-79.4,True,settled
+2025-01,Greater Darwin,1,XGBoost,2024-12,212.0,212.6,0.6,True,settled
+2025-01,Top End,1,XGBoost,2024-12,622.9,667.8,44.9,True,settled
+2025-02,Barkly,1,XGBoost,2025-01,807.7,659.6,-148.1,True,settled
+2025-02,Big Rivers,1,XGBoost,2025-01,534.0,513.9,-20.1,True,settled
+2025-02,Central Australia,1,XGBoost,2025-01,474.3,535.7,61.4,True,settled
+2025-02,East Arnhem,1,XGBoost,2025-01,254.0,283.9,29.9,True,settled
+2025-02,Greater Darwin,1,XGBoost,2025-01,199.9,216.2,16.3,True,settled
+2025-02,Top End,1,XGBoost,2025-01,552.5,477.0,-75.5,True,settled
+2025-03,Barkly,1,XGBoost,2025-02,1072.6,854.5,-218.1,False,settled
+2025-03,Big Rivers,1,XGBoost,2025-02,720.6,586.4,-134.2,True,settled
+2025-03,Central Australia,1,XGBoost,2025-02,548.2,518.7,-29.5,True,settled
+2025-03,East Arnhem,1,XGBoost,2025-02,312.6,261.5,-51.1,True,settled
+2025-03,Greater Darwin,1,XGBoost,2025-02,210.7,252.9,42.2,True,settled
+2025-03,Top End,1,XGBoost,2025-02,525.4,556.0,30.6,True,settled
+2025-04,Barkly,1,XGBoost,2025-03,754.8,779.6,24.8,True,settled
+2025-04,Big Rivers,1,XGBoost,2025-03,529.6,598.9,69.3,False,settled
+2025-04,Central Australia,1,XGBoost,2025-03,386.1,524.5,138.4,False,settled
+2025-04,East Arnhem,1,XGBoost,2025-03,306.1,277.1,-29.0,True,settled
+2025-04,Greater Darwin,1,XGBoost,2025-03,212.0,205.1,-6.9,True,settled
+2025-04,Top End,1,XGBoost,2025-03,541.7,534.9,-6.8,True,settled
+2025-05,Barkly,1,XGBoost,2025-04,834.2,838.9,4.7,True,settled
+2025-05,Big Rivers,1,XGBoost,2025-04,534.0,578.4,44.4,True,settled
+2025-05,Central Australia,1,XGBoost,2025-04,452.9,428.4,-24.5,True,settled
+2025-05,East Arnhem,1,XGBoost,2025-04,371.3,292.3,-79.0,True,settled
+2025-05,Greater Darwin,1,XGBoost,2025-04,223.3,208.5,-14.8,True,settled
+2025-05,Top End,1,XGBoost,2025-04,541.7,556.4,14.7,True,settled
+2025-06,Barkly,1,XGBoost,2025-05,834.2,888.3,54.1,True,settled
+2025-06,Big Rivers,1,XGBoost,2025-05,516.6,585.7,69.1,True,settled
+2025-06,Central Australia,1,XGBoost,2025-05,379.0,448.1,69.1,True,settled
+2025-06,East Arnhem,1,XGBoost,2025-05,130.3,275.7,145.4,False,settled
+2025-06,Greater Darwin,1,XGBoost,2025-05,196.8,190.8,-6.0,True,settled
+2025-06,Top End,1,XGBoost,2025-05,585.0,542.7,-42.3,True,settled
+2025-01,Barkly,3,Moving average (12m),2024-10,807.7,859.8,52.1,True,settled
+2025-01,Big Rivers,3,Moving average (12m),2024-10,586.1,599.2,13.1,True,settled
+2025-01,Central Australia,3,Moving average (12m),2024-10,617.3,561.7,-55.6,True,settled
+2025-01,East Arnhem,3,Moving average (12m),2024-10,345.2,277.0,-68.2,True,settled
+2025-01,Greater Darwin,3,Moving average (12m),2024-10,212.0,209.7,-2.3,True,settled
+2025-01,Top End,3,Moving average (12m),2024-10,622.9,555.6,-67.3,True,settled
+2025-02,Barkly,3,Moving average (12m),2024-11,807.7,865.1,57.4,True,settled
+2025-02,Big Rivers,3,Moving average (12m),2024-11,534.0,604.2,70.2,True,settled
+2025-02,Central Australia,3,Moving average (12m),2024-11,474.3,562.0,87.7,True,settled
+2025-02,East Arnhem,3,Moving average (12m),2024-11,254.0,281.4,27.4,True,settled
+2025-02,Greater Darwin,3,Moving average (12m),2024-11,199.9,212.1,12.2,True,settled
+2025-02,Top End,3,Moving average (12m),2024-11,552.5,566.4,13.9,True,settled
+2025-03,Barkly,3,Moving average (12m),2024-12,1072.6,902.4,-170.2,False,settled
+2025-03,Big Rivers,3,Moving average (12m),2024-12,720.6,609.1,-111.5,True,settled
+2025-03,Central Australia,3,Moving average (12m),2024-12,548.2,566.2,18.0,True,settled
+2025-03,East Arnhem,3,Moving average (12m),2024-12,312.6,280.6,-32.0,True,settled
+2025-03,Greater Darwin,3,Moving average (12m),2024-12,210.7,215.1,4.4,True,settled
+2025-03,Top End,3,Moving average (12m),2024-12,525.4,586.8,61.4,True,settled
+2025-04,Barkly,3,Moving average (12m),2025-01,754.8,912.8,158.0,False,settled
+2025-04,Big Rivers,3,Moving average (12m),2025-01,529.6,615.8,86.2,True,settled
+2025-04,Central Australia,3,Moving average (12m),2025-01,386.1,568.7,182.6,False,settled
+2025-04,East Arnhem,3,Moving average (12m),2025-01,306.1,278.6,-27.5,True,settled
+2025-04,Greater Darwin,3,Moving average (12m),2025-01,212.0,214.8,2.8,True,settled
+2025-04,Top End,3,Moving average (12m),2025-01,541.7,598.1,56.4,True,settled
+2025-05,Barkly,3,Moving average (12m),2025-02,834.2,927.7,93.5,True,settled
+2025-05,Big Rivers,3,Moving average (12m),2025-02,534.0,616.0,82.0,True,settled
+2025-05,Central Australia,3,Moving average (12m),2025-02,452.9,561.9,109.0,False,settled
+2025-05,East Arnhem,3,Moving average (12m),2025-02,371.3,280.6,-90.8,True,settled
+2025-05,Greater Darwin,3,Moving average (12m),2025-02,223.3,215.3,-8.0,True,settled
+2025-05,Top End,3,Moving average (12m),2025-02,541.7,607.1,65.4,True,settled
+2025-06,Barkly,3,Moving average (12m),2025-03,834.2,944.6,110.4,False,settled
+2025-06,Big Rivers,3,Moving average (12m),2025-03,516.6,641.2,124.6,False,settled
+2025-06,Central Australia,3,Moving average (12m),2025-03,379.0,558.5,179.5,False,settled
+2025-06,East Arnhem,3,Moving average (12m),2025-03,130.3,286.8,156.5,False,settled
+2025-06,Greater Darwin,3,Moving average (12m),2025-03,196.8,214.6,17.8,True,settled
+2025-06,Top End,3,Moving average (12m),2025-03,585.0,610.3,25.3,True,settled
+2025-01,Barkly,6,Moving average (12m),2024-07,807.7,819.8,12.1,True,settled
+2025-01,Big Rivers,6,Moving average (12m),2024-07,586.1,607.9,21.8,True,settled
+2025-01,Central Australia,6,Moving average (12m),2024-07,617.3,604.3,-13.0,True,settled
+2025-01,East Arnhem,6,Moving average (12m),2024-07,345.2,279.1,-66.1,True,settled
+2025-01,Greater Darwin,6,Moving average (12m),2024-07,212.0,215.8,3.8,True,settled
+2025-01,Top End,6,Moving average (12m),2024-07,622.9,545.2,-77.7,True,settled
+2025-02,Barkly,6,Moving average (12m),2024-08,807.7,822.5,14.8,True,settled
+2025-02,Big Rivers,6,Moving average (12m),2024-08,534.0,615.6,81.6,True,settled
+2025-02,Central Australia,6,Moving average (12m),2024-08,474.3,594.9,120.6,False,settled
+2025-02,East Arnhem,6,Moving average (12m),2024-08,254.0,283.6,29.6,True,settled
+2025-02,Greater Darwin,6,Moving average (12m),2024-08,199.9,212.2,12.3,True,settled
+2025-02,Top End,6,Moving average (12m),2024-08,552.5,560.1,7.6,True,settled
+2025-03,Barkly,6,Moving average (12m),2024-09,1072.6,826.5,-246.1,False,settled
+2025-03,Big Rivers,6,Moving average (12m),2024-09,720.6,601.6,-119.0,True,settled
+2025-03,Central Australia,6,Moving average (12m),2024-09,548.2,576.3,28.1,True,settled
+2025-03,East Arnhem,6,Moving average (12m),2024-09,312.6,281.5,-31.1,True,settled
+2025-03,Greater Darwin,6,Moving average (12m),2024-09,210.7,212.3,1.6,True,settled
+2025-03,Top End,6,Moving average (12m),2024-09,525.4,561.3,35.9,True,settled
+2025-04,Barkly,6,Moving average (12m),2024-10,754.8,859.8,105.0,True,settled
+2025-04,Big Rivers,6,Moving average (12m),2024-10,529.6,599.2,69.6,True,settled
+2025-04,Central Australia,6,Moving average (12m),2024-10,386.1,561.7,175.6,False,settled
+2025-04,East Arnhem,6,Moving average (12m),2024-10,306.1,277.0,-29.1,True,settled
+2025-04,Greater Darwin,6,Moving average (12m),2024-10,212.0,209.7,-2.3,True,settled
+2025-04,Top End,6,Moving average (12m),2024-10,541.7,555.6,13.9,True,settled
+2025-05,Barkly,6,Moving average (12m),2024-11,834.2,865.1,30.9,True,settled
+2025-05,Big Rivers,6,Moving average (12m),2024-11,534.0,604.2,70.2,True,settled
+2025-05,Central Australia,6,Moving average (12m),2024-11,452.9,562.0,109.1,False,settled
+2025-05,East Arnhem,6,Moving average (12m),2024-11,371.3,281.4,-89.9,True,settled
+2025-05,Greater Darwin,6,Moving average (12m),2024-11,223.3,212.1,-11.2,True,settled
+2025-05,Top End,6,Moving average (12m),2024-11,541.7,566.4,24.6,True,settled
+2025-06,Barkly,6,Moving average (12m),2024-12,834.2,902.4,68.2,True,settled
+2025-06,Big Rivers,6,Moving average (12m),2024-12,516.6,609.1,92.5,True,settled
+2025-06,Central Australia,6,Moving average (12m),2024-12,379.0,566.2,187.2,False,settled
+2025-06,East Arnhem,6,Moving average (12m),2024-12,130.3,280.6,150.3,False,settled
+2025-06,Greater Darwin,6,Moving average (12m),2024-12,196.8,215.1,18.3,True,settled
+2025-06,Top End,6,Moving average (12m),2024-12,585.0,586.8,1.8,True,settled
+2024-12,Barkly,12,Seasonal naive (t-12),2023-12,1164.5,717.5,-447.0,False,settled
+2024-12,Big Rivers,12,Seasonal naive (t-12),2023-12,698.8,640.3,-58.5,True,settled
+2024-12,Central Australia,12,Seasonal naive (t-12),2023-12,676.3,626.1,-50.2,True,settled
+2024-12,East Arnhem,12,Seasonal naive (t-12),2023-12,283.3,293.2,9.9,True,settled
+2024-12,Greater Darwin,12,Seasonal naive (t-12),2023-12,245.1,208.8,-36.3,True,settled
+2024-12,Top End,12,Seasonal naive (t-12),2023-12,789.1,543.5,-245.6,False,settled
+2025-02,Barkly,12,Seasonal naive (t-12),2024-02,807.7,629.1,-178.6,True,settled
+2025-02,Big Rivers,12,Seasonal naive (t-12),2024-02,534.0,531.8,-2.2,True,settled
+2025-02,Central Australia,12,Seasonal naive (t-12),2024-02,474.3,555.5,81.2,True,settled
+2025-02,East Arnhem,12,Seasonal naive (t-12),2024-02,254.0,230.6,-23.4,True,settled
+2025-02,Greater Darwin,12,Seasonal naive (t-12),2024-02,199.9,193.8,-6.1,True,settled
+2025-02,Top End,12,Seasonal naive (t-12),2024-02,552.5,443.9,-108.6,True,settled
+2025-03,Barkly,12,Seasonal naive (t-12),2024-03,1072.6,870.0,-202.6,True,settled
+2025-03,Big Rivers,12,Seasonal naive (t-12),2024-03,720.6,417.5,-303.1,False,settled
+2025-03,Central Australia,12,Seasonal naive (t-12),2024-03,548.2,589.3,41.1,True,settled
+2025-03,East Arnhem,12,Seasonal naive (t-12),2024-03,312.6,237.2,-75.4,True,settled
+2025-03,Greater Darwin,12,Seasonal naive (t-12),2024-03,210.7,220.1,9.4,True,settled
+2025-03,Top End,12,Seasonal naive (t-12),2024-03,525.4,487.7,-37.7,True,settled
+2025-04,Barkly,12,Seasonal naive (t-12),2024-04,754.8,749.6,-5.2,True,settled
+2025-04,Big Rivers,12,Seasonal naive (t-12),2024-04,529.6,540.6,11.0,True,settled
+2025-04,Central Australia,12,Seasonal naive (t-12),2024-04,386.1,504.8,118.7,False,settled
+2025-04,East Arnhem,12,Seasonal naive (t-12),2024-04,306.1,250.4,-55.7,True,settled
+2025-04,Greater Darwin,12,Seasonal naive (t-12),2024-04,212.0,210.5,-1.5,True,settled
+2025-04,Top End,12,Seasonal naive (t-12),2024-04,541.7,482.2,-59.5,True,settled
+2025-05,Barkly,12,Seasonal naive (t-12),2024-05,834.2,950.3,116.1,False,settled
+2025-05,Big Rivers,12,Seasonal naive (t-12),2024-05,534.0,610.9,76.9,True,settled
+2025-05,Central Australia,12,Seasonal naive (t-12),2024-05,452.9,538.6,85.7,True,settled
+2025-05,East Arnhem,12,Seasonal naive (t-12),2024-05,371.3,257.0,-114.3,True,settled
+2025-05,Greater Darwin,12,Seasonal naive (t-12),2024-05,223.3,212.4,-10.9,True,settled
+2025-05,Top End,12,Seasonal naive (t-12),2024-05,541.7,504.2,-37.5,True,settled
+2025-06,Barkly,12,Seasonal naive (t-12),2024-06,834.2,990.5,156.3,False,settled
+2025-06,Big Rivers,12,Seasonal naive (t-12),2024-06,516.6,694.4,177.8,False,settled
+2025-06,Central Australia,12,Seasonal naive (t-12),2024-06,379.0,502.4,123.4,False,settled
+2025-06,East Arnhem,12,Seasonal naive (t-12),2024-06,130.3,289.9,159.6,False,settled
+2025-06,Greater Darwin,12,Seasonal naive (t-12),2024-06,196.8,174.5,-22.3,True,settled
+2025-06,Top End,12,Seasonal naive (t-12),2024-06,585.0,504.2,-80.8,True,settled
+2026-01,Barkly,1,XGBoost,2025-12,847.5,632.3,-215.2,False,provisional
+2026-01,Big Rivers,1,XGBoost,2025-12,529.6,466.6,-63.0,True,provisional
+2026-01,Central Australia,1,XGBoost,2025-12,445.7,473.9,28.2,True,provisional
+2026-01,East Arnhem,1,XGBoost,2025-12,306.1,264.5,-41.6,True,provisional
+2026-01,Greater Darwin,1,XGBoost,2025-12,207.5,198.7,-8.8,True,provisional
+2026-01,Top End,1,XGBoost,2025-12,585.0,595.2,10.2,True,provisional
+2026-02,Barkly,1,XGBoost,2026-01,648.8,771.8,123.0,False,provisional
+2026-02,Big Rivers,1,XGBoost,2026-01,499.2,494.7,-4.5,True,provisional
+2026-02,Central Australia,1,XGBoost,2026-01,469.5,416.4,-53.1,True,provisional
+2026-02,East Arnhem,1,XGBoost,2026-01,293.1,257.2,-35.9,True,provisional
+2026-02,Greater Darwin,1,XGBoost,2026-01,196.8,184.6,-12.2,True,provisional
+2026-02,Top End,1,XGBoost,2026-01,297.9,466.6,168.7,False,provisional
+2026-03,Barkly,1,XGBoost,2026-02,516.4,755.7,239.3,False,provisional
+2026-03,Big Rivers,1,XGBoost,2026-02,451.5,571.8,120.3,False,provisional
+2026-03,Central Australia,1,XGBoost,2026-02,414.7,496.2,81.5,False,provisional
+2026-03,East Arnhem,1,XGBoost,2026-02,221.5,281.9,60.4,True,provisional
+2026-03,Greater Darwin,1,XGBoost,2026-02,229.0,208.7,-20.3,True,provisional
+2026-03,Top End,1,XGBoost,2026-02,308.8,441.5,132.7,False,provisional
+2026-04,Barkly,1,XGBoost,2026-03,516.4,645.3,128.9,False,provisional
+2026-04,Big Rivers,1,XGBoost,2026-03,447.1,442.8,-4.3,True,provisional
+2026-04,Central Australia,1,XGBoost,2026-03,502.9,351.8,-151.1,False,provisional
+2026-04,East Arnhem,1,XGBoost,2026-03,293.1,195.6,-97.5,True,provisional
+2026-04,Greater Darwin,1,XGBoost,2026-03,205.0,201.0,-4.0,True,provisional
+2026-04,Top End,1,XGBoost,2026-03,476.7,384.5,-92.2,True,provisional
+2026-03,Barkly,3,Moving average (12m),2025-12,516.4,866.2,349.8,False,provisional
+2026-03,Big Rivers,3,Moving average (12m),2025-12,451.5,588.9,137.4,False,provisional
+2026-03,Central Australia,3,Moving average (12m),2025-12,414.7,459.8,45.1,True,provisional
+2026-03,East Arnhem,3,Moving average (12m),2025-12,221.5,295.3,73.8,True,provisional
+2026-03,Greater Darwin,3,Moving average (12m),2025-12,229.0,207.3,-21.7,True,provisional
+2026-03,Top End,3,Moving average (12m),2025-12,308.8,572.4,263.6,False,provisional
+2026-04,Barkly,3,Moving average (12m),2026-01,516.4,869.5,353.1,False,provisional
+2026-04,Big Rivers,3,Moving average (12m),2026-01,447.1,584.2,137.1,False,provisional
+2026-04,Central Australia,3,Moving average (12m),2026-01,502.9,445.5,-57.4,True,provisional
+2026-04,East Arnhem,3,Moving average (12m),2026-01,293.1,292.0,-1.1,True,provisional
+2026-04,Greater Darwin,3,Moving average (12m),2026-01,205.0,206.9,1.9,True,provisional
+2026-04,Top End,3,Moving average (12m),2026-01,476.7,569.2,92.5,True,provisional

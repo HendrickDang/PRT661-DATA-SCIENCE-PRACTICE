@@ -104,7 +104,8 @@ with col1:
             <b>Key Features:</b>
             <ul>
                 <li><b>Spatial Crime Distribution Map</b>: Interactive NT map with per-capita victimisation layers and service hubs.</li>
-                <li><b>Frontline Staffing Matrix</b>: Critical, Elevated, and Baseline priority tiers with actionable operational responses.</li>
+                <li><b>Forecasts & Planning Ranges</b>: 1 to 12 month forecasts per region with 80% ranges, expected assaults per month and the latest release check.</li>
+                <li><b>Frontline Staffing Matrix</b>: High-need, Elevated and Baseline priority tiers with suggested operational responses.</li>
                 <li><b>Seasonal Surge Calendar</b>: Wet Season vs Dry Season police roster and hospital ED planning.</li>
                 <li><b>Policy Scenario Simulator</b>: Simulate real-world policy levers like wholesale alcohol supply curbs (-15%, -20%) and forecast incident reduction.</li>
                 <li><b>Zero technical jargon</b>: Plain-English, high-impact executive summaries.</li>

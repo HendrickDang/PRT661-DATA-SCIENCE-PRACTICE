@@ -28,7 +28,8 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 | `Updated_End_to_End_pipeline.py` | **Final code to run** | Full pipeline: ingest, panel build, EDA, PCA and regression. Produces the figures in Sections 4.1-4.5 of the report. |
 | `evaluation.py` | **Final** | Standalone forecast evaluation and benchmarking. Produces Section 4.6. Runs independently of the pipeline. |
 | `forecast.py` | **Final (Assessment 4)** | Forecasts for the next 1, 3, 6 and 12 months with 80% intervals, one saved model bundle per horizon, and a first out-of-sample check on January to April 2026. Run after `evaluation.py`. |
-| `app.py` (+ `pages/`, `core_data.py`) | **Final** | Streamlit dual-role dashboard for PFES-facing briefing and technical model review. Requires the processed panel from the pipeline. |
+| `monitoring.py` | **Final (Assessment 4)** | Release checks from the monitoring design: data quality, forecast accuracy and drift, each PASS, WARN or FAIL, plus the decisions to promote the forecasts and whether to retrain. Run after `forecast.py`. |
+| `app.py` (+ `pages/`, `core_data.py`) | **Final** | Streamlit dual-role dashboard for PFES-facing briefing and technical model review. Shows the forecasts with 80% ranges and the latest release check. Requires the processed panel from the pipeline. |
 | `run_dashboard.bat` | Helper (Windows) | Launches `streamlit run app.py` using a local Anaconda install when available. |
 | `End to End pipeline.py` | Superseded | The original pipeline. Retained for contribution history. It contains three data leakage issues corrected in the file above, and does not run on Python 3.8. |
 | `End to End pipeline_Will fix.py` | Superseded | Earlier debugging copy. Not part of the current workflow. |
@@ -114,7 +115,27 @@ Headline result on the 2026 months (RMSE per 100,000, provisional actuals):
 
 All four fitted models beat both benchmarks on these months, and the linear models beat XGBoost at both horizons. XGBoost's one-month error (103.8) is close to its backtest error (99.8), but its 80% interval covered only 15 of 24 outcomes (62.5%). Every method forecasts above the outcome on average, which is expected: all 2026 months are within six months of the As At date, so the counts are provisional and will rise [A23]. With four months and six regions, this check cannot overturn the four-year backtest. It is the first data point for the monitoring stage, which should re-score these months once they are final.
 
-`F1_forecasts.csv` has one row per origin, horizon, region and model, with `Recommended = True` on the method to show and `Lower_80` / `Upper_80` filled for that method. The dashboard can read it directly to show the multi-horizon view.
+`F1_forecasts.csv` has one row per origin, horizon, region and model, with `Recommended = True` on the method to show and `Lower_80` / `Upper_80` filled for that method. The dashboard reads it directly for the Forecasts & Planning Ranges tab.
+
+## Running the release checks (monitoring)
+
+```bash
+python monitoring.py                 # check date defaults to today
+python monitoring.py --as-of 2026-10-18
+```
+
+Run after `forecast.py`, and again after every new NT crime statistics release. It implements the team's monitoring design (`documents/Monitoring_Design_DAN2_Theme2.docx`) and takes a few seconds. Nothing is refitted.
+
+| Area | Checks | Rule |
+| --- | --- | --- |
+| Data (D1-D10) | Source files, schema and header drift, category map, region crosswalk, calendar gaps, raw-to-panel rebuild, provisional window, release age, alcohol supply lag, population coverage | FAIL blocks the release; WARN is logged |
+| Performance (P, C) | Recommended method per horizon on the latest settled months: skill against the seasonal naive benchmark, RMSE against the backtest, 80% interval coverage | h = 1: WARN if skill < 10%, FAIL if < 0%. h = 3-12: WARN if RMSE > 1.25 x backtest, FAIL if skill < 0%. Coverage: WARN outside 70-90% |
+| Newest months (N, NC) | The same rules on the 2026 months scored by `forecast.py` | Provisional actuals never FAIL; a FAIL is shown as WARN [A23] |
+| Drift (R1-R3) | Regional rate against the same quarter of the previous three years; alcohol- and DV-involved shares | WARN for human review only [A24]; never an automatic retrain |
+
+It writes `Outputs/M1_monitoring_checks.csv` (one row per check), `Outputs/M2_monitoring_scored.csv` (every scored forecast with its error and whether it fell inside the 80% interval) and `Outputs/M3_monitoring_summary.json` (overall status and two decisions: promote the forecasts to the dashboard, and retrain or not). A FAIL on settled months stops the forecasts being promoted and opens an investigation; retraining follows only if the FAIL repeats or is explained by lasting drift. Planned refreshes happen when the panel can be extended, which needs the 2026 population estimates [A1].
+
+Result of the check on 18 October 2026: **WARN, 19 PASS, 6 WARN, 0 FAIL**, forecasts promoted, no retraining needed. On the latest settled months XGBoost keeps 28.4% skill at one month and every interval covers 74-81% of outcomes. The warnings are the age of the crime file (As At 1 June 2026), 2026 rates using 2025 population, the low interval coverage and three-month error on the provisional 2026 months, and a drift flag: Central Australia's October-December 2025 rate is 32% below the same quarter of 2022-2024, a sustained fall the review should confirm is real rather than a recording change.
 
 ## Running the dashboard
 
@@ -130,12 +151,16 @@ The app opens at http://localhost:8501 with two roles:
 
 | Page | Audience | Contents |
 | --- | --- | --- |
-| **Administrator Portal** (`pages/1_Administrator_Portal.py`) | Policy / PFES / health and justice planners | KPIs, spatial demand map, staffing priority matrix, seasonal surge calendar, policy scenario simulator, briefing export |
-| **Data Science Workbench** (`pages/2_Data_Science_Workbench.py`) | Technical reviewers | Assumptions, EDA, PCA, feature selection and VIF, hyperparameter curves, Model A vs B, residual diagnostics, pipeline figure viewer |
+| **Administrator Portal** (`pages/1_Administrator_Portal.py`) | Policy / PFES / health and justice planners | KPIs, **forecasts and planning ranges** (1-12 months, 80% ranges, expected assaults per month, release check status), spatial demand map, staffing priority matrix, seasonal calendar, policy scenario simulator, briefing export |
+| **Data Science Workbench** (`pages/2_Data_Science_Workbench.py`) | Technical reviewers | Assumptions [A1-A24], EDA, PCA, feature selection and VIF, hyperparameter curves, Model A vs B, residual diagnostics, pipeline figure viewer, **backtest, 2026 check and release monitoring** |
 
 Shared loading and model training live in `core_data.py` (cached). Do **not** run files under `pages/` with `python` directly — Streamlit must start from `app.py` at the repo root so imports resolve.
 
-Note: the dashboard retrains the Model A/B suite from the processed panel for interactive inspection, with the same features and tuning rules as the pipeline. The policy scenario simulator is illustrative: its pass-through factors are assumptions, not estimates. Multi-horizon benchmarking and the operational split recommendation (XGBoost at one month, simple benchmarks beyond) are produced by `evaluation.py`, and the resulting forecasts with 80% intervals by `forecast.py` (`Outputs/F1_forecasts.csv`).
+The forecast tab and the Workbench's backtest tab read `Outputs/` (F1, E4-E6, M1-M3) and refit nothing, so they always show the figures in the report. The Model A/B tabs still retrain the suite from the processed panel for interactive inspection, with the same features and tuning rules as the pipeline. The policy scenario simulator is illustrative: its pass-through factors are assumptions, not estimates. Priority tiers use neutral wording (High need, Elevated, Baseline): they describe a need for services, not a judgement about a community.
+
+### Hosted version (Streamlit Community Cloud)
+
+The dashboard is deployed from this repository's `main` branch: share.streamlit.io, New app, repository `HendrickDang/PRT661-DATA-SCIENCE-PRACTICE`, branch `main`, main file `app.py`, and under Advanced settings **Python 3.11** (the pinned NumPy 1.24.4 has no wheels for Python 3.12 or later). Streamlit Cloud installs from the root `requirements.txt`, a copy of `Environment Setup Instructions/requirements.txt`; keep the two identical. Every push to `main` redeploys the app. The cloud host is Linux x86_64 with Python 3.11, the reference environment, so the hosted numbers match the report.
 
 ## Feature selection in the pipeline and in the evaluation module
 
@@ -152,7 +177,9 @@ In Assessment 2 the two scales disagreed (V4 on the log scale, V2 on the rate sc
 | `dataset/source/` | Raw source files, stored untouched. All corrections happen in code. |
 | `dataset/raw/` | Ingested copies plus `manifest.json` |
 | `dataset/processed/` | Merged panel, `nt_crime_merged_2015_2025.csv` (13,629 rows x 44 cols) |
-| `Outputs/` | Result tables: pipeline (R1, R4, R9, R10, run summary), evaluation module (E2, E4, E5) and forecast stage (F1, E6, run summary) |
+| `Outputs/` | Result tables: pipeline (R1, R4, R9, R10, run summary), evaluation module (E2, E4, E5), forecast stage (F1, E6, run summary) and release checks (M1-M3) |
+| `monitoring.py` | Release checks after each data release (PASS / WARN / FAIL) |
+| `requirements.txt` | Copy of the pinned environment at the root, read by Streamlit Community Cloud |
 | `Models/` | Saved model bundles: `model_a.joblib` (pipeline) and `forecast_h1/3/6/12.joblib` (forecast stage). See `Models/README.md` |
 | `eda_plots/` | 13 exploratory figures |
 | `regression_plots/` | 8 regression and forecast figures (R1-R9) |
@@ -188,8 +215,9 @@ In Assessment 2 the two scales disagreed (V4 on the log scale, V2 on the rate sc
 
 ## Assumptions
 
-The pipeline carries a numbered assumption log ([A1] to [A21]) in its module docstring, and `forecast.py` adds [A22] and [A23] in its own. Every non-obvious modelling or data decision is tagged there and referenced at the point in the code where it applies. [A15] to [A17] cover the three data leakage corrections made for Assessment 2. [A18] and [A19] cover the two feature-timing corrections made for Assessment 3, and [A20] the result tables written to `Outputs/`. Assessment 4 adds:
+The pipeline carries a numbered assumption log ([A1] to [A21]) in its module docstring, `forecast.py` adds [A22] and [A23] in its own, and `monitoring.py` adds [A24]. Every non-obvious modelling or data decision is tagged there and referenced at the point in the code where it applies. [A15] to [A17] cover the three data leakage corrections made for Assessment 2. [A18] and [A19] cover the two feature-timing corrections made for Assessment 3, and [A20] the result tables written to `Outputs/`. Assessment 4 adds:
 
 - [A21] Model A is saved to `Models/model_a.joblib` with its scaler and feature order. It loads only under the pinned package versions.
 - [A22] 2026 assault rates use each region's 2025 population, the latest published.
 - [A23] The 2026 months are provisional, so `forecast.py` reports bias alongside error and treats the check as an early warning, not a final score.
+- [A24] Initial drift thresholds in `monitoring.py`: WARN if a region's quarterly rate differs from the same quarter of the previous three years by more than 25%, or if the alcohol- or DV-involved share of assaults moves by more than 5 percentage points. Drift prompts human review and never triggers retraining by itself.

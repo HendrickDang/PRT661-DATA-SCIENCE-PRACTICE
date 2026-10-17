@@ -398,3 +398,45 @@ def run_model_training(train: pd.DataFrame, test: pd.DataFrame, cv_frame: pd.Dat
         "features_b": features_b if "features_b" in locals() else [],
         "test_b": test_b if "test_b" in locals() else pd.DataFrame(),
     }
+
+
+# -----------------------------------------------------------------------------
+# Forecast, backtest and monitoring outputs (Assessment 4)
+# -----------------------------------------------------------------------------
+# The dashboard reads the files that evaluation.py, forecast.py and
+# monitoring.py write to Outputs/, so planners see exactly the forecasts and
+# checks reported in the final report. Nothing here refits a model.
+
+OUTPUTS_DIR = BASE_DIR / "Outputs"
+FORECAST_FILES = {
+    "forecasts": "F1_forecasts.csv",
+    "backtest": "E4_backtest_metrics.csv",
+    "bootstrap": "E4_backtest_paired_bootstrap.csv",
+    "intervals": "E5_prediction_intervals.csv",
+    "holdout_predictions": "E6_holdout_2026_predictions.csv",
+    "holdout_metrics": "E6_holdout_2026_metrics.csv",
+    "checks": "M1_monitoring_checks.csv",
+}
+
+
+@st.cache_data(show_spinner="Loading forecasts and monitoring results...")
+def load_forecast_outputs() -> dict:
+    """Read the forecast stage and monitoring outputs. Missing files are
+    returned as None so a page can explain which script to run."""
+    out = {}
+    for key, name in FORECAST_FILES.items():
+        path = OUTPUTS_DIR / name
+        out[key] = pd.read_csv(path) if path.exists() else None
+    for key, name in [("forecast_summary", "forecast_run_summary.json"),
+                      ("monitoring", "M3_monitoring_summary.json")]:
+        path = OUTPUTS_DIR / name
+        out[key] = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    return out
+
+
+def latest_population(monthly_assault: pd.DataFrame) -> pd.Series:
+    """Population of each region in the latest year, used to turn a rate per
+    100,000 into an expected number of assaults ([A22])."""
+    last_year = int(monthly_assault["Year"].max())
+    return (monthly_assault[monthly_assault["Year"] == last_year]
+            .groupby("Region")["Total_population"].first())

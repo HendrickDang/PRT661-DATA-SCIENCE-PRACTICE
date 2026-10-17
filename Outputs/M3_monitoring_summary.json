@@ -1,0 +1,33 @@
+{
+  "check_date": "2026-10-18",
+  "crime_data_as_at": "2026-06-01",
+  "settled_until": "2025-12",
+  "provisional_months": [
+    "2026-01",
+    "2026-02",
+    "2026-03",
+    "2026-04"
+  ],
+  "overall_status": "WARN",
+  "counts": {
+    "PASS": 19,
+    "WARN": 6,
+    "FAIL": 0
+  },
+  "promote_forecasts_to_dashboard": true,
+  "retraining_decision": "Not needed: no performance FAIL on settled months. Next planned refresh when the panel can be extended (2026 population estimates, [A1])",
+  "warnings": [
+    "D8: Crime release freshness - As At 01 Jun 2026, 139 days before the check date",
+    "D10: Population estimates cover the crime months - population to 2025, crime to 2026-04",
+    "NC1: h=1 80% interval coverage on newest months (provisional) - 62.5% of 24",
+    "N3: h=3 Moving average (12m) on newest months (provisional) - RMSE 176.6, skill 16.5%, bias +114.5 (2026-03 to 2026-04)",
+    "NC3: h=3 80% interval coverage on newest months (provisional) - 58.3% of 12",
+    "R1: Regional rate vs same quarter, previous 3 years - 1 region(s) shifted (Oct-Dec 2025)"
+  ],
+  "failures": [],
+  "environment": {
+    "platform": "Linux x86_64",
+    "python": "3.11.16",
+    "pandas": "2.0.3"
+  }
+}

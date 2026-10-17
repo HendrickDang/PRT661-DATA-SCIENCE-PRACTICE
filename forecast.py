@@ -46,6 +46,7 @@ from pathlib import Path
 import joblib
 import matplotlib
 matplotlib.use("Agg")  # write PNGs without needing a display
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -323,6 +324,10 @@ def plot_forecasts(base_ext: pd.DataFrame, forecasts: pd.DataFrame,
         ax.axvline(origin, color="#9E9E9E", linestyle="--", linewidth=1)
         ax.set_title(region, fontsize=11)
         ax.grid(alpha=0.3)
+        # One label every six months, so the shared date axis stays readable
+        ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 7)))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
+        ax.tick_params(axis="x", labelsize=9)
     for ax in axes[:, 0]:
         ax.set_ylabel("Assaults per 100,000")
     handles, labels = {}, {}

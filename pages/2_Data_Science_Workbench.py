@@ -31,6 +31,7 @@ from core_data import (
     YEAR_MIN,
     get_regression_panel,
     load_data,
+    load_forecast_outputs,
     run_model_training,
 )
 
@@ -106,7 +107,8 @@ ds_tabs = st.tabs([
     "⚙️ Hyperparameter Optimization",
     "🏆 Model Benchmarking (Model A & B)",
     "📉 Residual Diagnostics & Hypothesis Testing",
-    "🖼️ High-Res Pipeline Plots"
+    "🖼️ High-Res Pipeline Plots",
+    "🔁 Backtest, Forecasts & Monitoring"
 ])
 
 # =============================================================================
@@ -145,7 +147,7 @@ with ds_tabs[0]:
             st.info("Manifest file not found.")
 
     st.markdown("---")
-    st.markdown("##### Assumption Log Reference Table [A1 – A20]")
+    st.markdown("##### Assumption Log Reference Table [A1 – A24]")
     assumptions_data = [
         {"Code": "[A1]", "Name": "Historical Window", "Description": "Window fixed to 2015–2025; earlier records (from 2008) trimmed to avoid structural discontinuity."},
         {"Code": "[A2]", "Name": "ANZSOC Harmonisation", "Description": "Maps PROMIS offence categories to ANZSOC standards; unmapped categories throw an explicit error rather than silently becoming NaN."},
@@ -167,6 +169,10 @@ with ds_tabs[0]:
         {"Code": "[A18]", "Name": "Lagged Crime Context", "Description": "Alcohol- and DV-flagged assault counts enter the models lagged one month. The same-month counts are part of the target and are not known at forecast time."},
         {"Code": "[A19]", "Name": "Alcohol Supply Timing", "Description": "Model B uses the wholesale supply of the previous quarter, because the current quarter's figure is published too late to forecast with."},
         {"Code": "[A20]", "Name": "Result Tables on File", "Description": "Every regression table is written to Outputs/ with a run summary recording platform and package versions."},
+        {"Code": "[A21]", "Name": "Saved Models", "Description": "Model A (pipeline) and one forecast bundle per horizon (forecast.py) are saved with joblib, with feature order and package versions. They load only under the pinned versions."},
+        {"Code": "[A22]", "Name": "2026 Population", "Description": "2026 assault rates use each region's 2025 population, the latest published estimate."},
+        {"Code": "[A23]", "Name": "Provisional 2026 Months", "Description": "January-April 2026 are within six months of the As At date, so they are provisional; the 2026 check reports bias as well as error."},
+        {"Code": "[A24]", "Name": "Drift Thresholds", "Description": "monitoring.py flags drift when a region's quarterly rate moves more than 25% against the same quarter of the previous three years, or a flag share moves more than 5 points. Drift prompts human review, never an automatic retrain."},
     ]
     st.dataframe(pd.DataFrame(assumptions_data), hide_index=True, use_container_width=True)
 
@@ -506,3 +512,61 @@ with ds_tabs[7]:
     else:
         st.info("No generated PNG figures found.")
 
+
+# =============================================================================
+# TAB 9: Backtest, Forecasts & Monitoring (Assessment 4)
+# =============================================================================
+with ds_tabs[8]:
+    st.subheader("🔁 Rolling-Origin Backtest, Forecasts and Release Monitoring")
+    st.markdown(
+        "Results written by `evaluation.py` (E4, E5), `forecast.py` (F1, E6) and `monitoring.py` (M1-M3). "
+        "Each horizon is forecast directly: the lags are h, h + 2 and 12 months, a separate model is fitted "
+        "per horizon, and every month from June 2021 to June 2025 is scored."
+    )
+    fo = load_forecast_outputs()
+    bt = fo["backtest"]
+    if bt is None:
+        st.info("Backtest results not found. Run `python evaluation.py`.")
+    else:
+        pivot = bt.pivot_table(index="Model", columns="Horizon_months", values="RMSE")
+        pivot.columns = [f"h = {c}" for c in pivot.columns]
+        pivot = pivot.sort_values("h = 1")
+        st.markdown("##### Backtest RMSE per 100,000 by horizon (lowest per column highlighted)")
+        st.dataframe(pivot.style.format("{:.1f}").highlight_min(axis=0, color="#c6f6d5"),
+                     use_container_width=True)
+
+        bt_colours = {"XGBoost": "#E53935", "Moving average (12m)": "#1E88E5",
+                      "Seasonal naive (t-12)": "#78909C", "Linear": "#8E24AA",
+                      "Ridge (a=0.01)": "#FB8C00", "Lasso (a=0.01)": "#43A047"}
+        fig_bt = go.Figure()
+        for model, grp in bt.sort_values("Horizon_months").groupby("Model"):
+            fig_bt.add_trace(go.Scatter(x=grp["Horizon_months"], y=grp["RMSE"],
+                                        mode="lines+markers", name=model,
+                                        line=dict(color=bt_colours.get(model))))
+        fig_bt.update_layout(height=380, xaxis_title="Forecast horizon (months ahead)",
+                             yaxis_title="RMSE per 100,000", xaxis=dict(tickvals=[1, 3, 6, 12]),
+                             legend=dict(orientation="h", y=-0.25))
+        st.plotly_chart(fig_bt, use_container_width=True)
+
+        c_left, c_right = st.columns(2)
+        with c_left:
+            if fo["bootstrap"] is not None:
+                st.markdown("##### Paired bootstrap over whole months")
+                st.dataframe(fo["bootstrap"].round(2), hide_index=True, use_container_width=True)
+        with c_right:
+            if fo["intervals"] is not None:
+                st.markdown("##### 80% intervals: offsets and out-of-sample coverage")
+                st.dataframe(fo["intervals"].round(1), hide_index=True, use_container_width=True)
+
+    if fo["holdout_metrics"] is not None:
+        st.markdown("##### Frozen models on January-April 2026 (provisional actuals) [A22] [A23]")
+        st.dataframe(fo["holdout_metrics"].round(1), hide_index=True, use_container_width=True)
+
+    if fo["checks"] is not None:
+        st.markdown("##### Latest release check (`monitoring.py`)")
+        mon = fo["monitoring"] or {}
+        if mon:
+            st.markdown(f"**Overall: {mon['overall_status']}**. Promote forecasts: "
+                        f"{'yes' if mon['promote_forecasts_to_dashboard'] else 'no'}. "
+                        f"Retraining: {mon['retraining_decision']}")
+        st.dataframe(fo["checks"], hide_index=True, use_container_width=True)

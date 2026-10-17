@@ -6,11 +6,26 @@ Project changes since Assessment 1, with justification. Referenced from Section 
 
 ## Assessment 4 (October 2026)
 
+### Release monitoring (`monitoring.py`, new)
+
+- **Monitoring design implemented.** `monitoring.py` runs the checks in `documents/Monitoring_Design_DAN2_Theme2.docx` after each release: ten data checks (files, schema and header drift, category map, region crosswalk, calendar gaps, raw-to-panel rebuild, provisional window, release age, alcohol supply lag, population coverage), performance checks on the latest settled months and on the provisional 2026 months, and three drift checks. Each is PASS, WARN or FAIL, and the run writes the two decisions the design calls for: promote the forecasts or not, and retrain or not. Justification: the monitoring stage was the last planned pipeline stage still on paper; a check that is not run is not a control.
+- **Thresholds updated to current figures.** The design's thresholds are used as written; the reference figures they are compared with now come from the corrected backtest (XGBoost skill 27.4%, seasonal naive best at 12 months), closing the open item below. Provisional months are never scored FAIL, as the design specifies.
+- **[A24] Drift thresholds.** The design left drift to human review without numbers. Initial values: 25% change in a region's quarterly rate against the same quarter of the previous three years, or 5 percentage points in the alcohol- or DV-involved share.
+- **First result (check date 18 October 2026): WARN, 19 PASS, 6 WARN, 0 FAIL.** Forecasts promoted; no retraining needed. Warnings: crime file As At 1 June 2026 is 139 days old; 2026 rates use 2025 population; on the provisional 2026 months the 80% intervals covered 62.5% (h = 1) and 58.3% (h = 3) and the three-month error was 1.5 times the backtest; Central Australia's October-December 2025 rate was 32% below the same quarter of 2022-2024.
+
+### Dashboard
+
+- **Forecasts & Planning Ranges tab** in the Administrator Portal: forecasts for every region at 1, 3, 6 and 12 months from `Outputs/F1_forecasts.csv`, the 80% range, the expected number of assaults per month (rate x latest population), a chart against the 2026 provisional actuals, a plain-language reliability note, and the release-check status from `monitoring.py`. Closes the open item "Dashboard multi-horizon view".
+- **Backtest, Forecasts & Monitoring tab** in the Data Science Workbench: backtest RMSE by horizon, bootstrap, interval coverage, the 2026 check and the full release-check table. Assumption log extended to [A24].
+- **Neutral wording.** "Critical surge" alerts renamed "High resource need" and the staffing tiers "High need / Elevated / Baseline", so a region is described by its need for services rather than as a problem. Justification: responsible-use commitment in the Assessment 2 ethics section.
+- **Hosting.** A root `requirements.txt` (copy of the pinned environment) lets Streamlit Community Cloud build the app; deploy with Python 3.11.
+
 ### Forecast stage (`forecast.py`, new)
 
 - **Forecasts with intervals (F1).** Every region is forecast 1, 3, 6 and 12 months ahead of December 2025, using the method with the lowest backtest RMSE at each horizon and its empirical 80% interval. `Outputs/F1_forecasts.csv` is in a long format the dashboard can read directly. Justification: the project goal is a forecast PFES can plan with; until now the repository held only evaluations of forecasts.
 - **First out-of-sample check (E6).** The latest crime file already held January to April 2026, which the panel omitted because population ends in 2025. The saved models were kept frozen and scored on these 24 region-months at one month ahead and 12 at three months. Justification: the backtest re-uses the history it was tuned on; these months are the first data no decision in the project has seen. Result: the linear models (80.5 per 100,000) beat XGBoost (103.8) and both benchmarks at one month, XGBoost's 80% interval covered 62.5% of outcomes, and every method over-forecast on average, as expected for provisional counts [A23]. The sample is too small to change the recommendation, but it is the first entry for monitoring.
 - **Rebuild check.** Before using the 2026 rows, `forecast.py` rebuilds 2025 from the raw file with the pipeline's own crosswalk and confirms it matches the processed panel exactly, so the new months are built the same way as the old ones.
+- **Readable forecast figure.** `regression_plots/R9_forecasts_2026.png` now labels the shared date axis every six months ("Jan 2025", "Jul 2025"), so the labels no longer overlap. Only the figure changed; every CSV, JSON and model file from `forecast.py` is byte for byte the same.
 - **Leakage check.** For all 16 forecast origin and horizon combinations, the features and benchmarks were rebuilt with every value after the origin removed; none changed.
 
 ### Saved models
@@ -27,10 +42,10 @@ Project changes since Assessment 1, with justification. Referenced from Section 
 
 ### Known open items
 
-- **Monitoring thresholds.** The monitoring design draft quotes XGBoost skill of 29.7% and the moving average as the 12-month method. The current figures are 27.4% and the seasonal naive value. The E6 coverage of 62.5% would already be a WARN under the draft's 70-90% band, but over four months, not the rolling year the rule specifies.
+- ~~Monitoring thresholds~~: resolved by `monitoring.py`, which compares against the current backtest figures.
 - **Re-score E6 when the 2026 months are final**, and extend the panel to 2026 once 2026 population estimates are published.
 - **Region-specific intervals.** The 80% interval is pooled across regions, so it is too wide for Greater Darwin and too narrow for Barkly.
-- **Dashboard multi-horizon view** to read `Outputs/F1_forecasts.csv`, and the Model A tab to load `Models/model_a.joblib` instead of retraining.
+- ~~Dashboard multi-horizon view~~: added. Still open: the Model A tab could load `Models/model_a.joblib` instead of retraining.
 - Carried over from Assessment 3: one shared module for panel building, the policy simulator's assumed factors, and the stale `Visualizations/` folder.
 
 ---

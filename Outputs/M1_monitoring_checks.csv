@@ -1,0 +1,26 @@
+Check_id,Area,Check,Value,Rule,Status,Note
+D1,Data,Source files present,6 of 6,all expected files resolve in dataset/source/,PASS,
+D2,Data,Crime file schema,all required columns,required columns present; spacing or case drift is handled,PASS,header drift handled: 'Offence type '
+D3,Data,Offence categories mapped,0 unmapped; '02 Assault' present: True,no unmapped PROMIS category; ANZSOC assault category present,PASS,
+D4,Data,Region crosswalk covers all rows,"0 new police region(s), 0 new SA2 name(s)",every police region and NT Balance SA2 maps to an NTG region,PASS,377 NT Balance rows have SA2 'Unknown' and go to Top End [A5]
+D5,Data,Calendar completeness,1 missing month(s): 2023-11,"only documented gaps; gaps stay NaN, never imputed",PASS,Nov 2023 is the documented PROMIS-SerPro gap [A3]
+D6,Data,Raw file rebuilds the processed panel,2025 matches exactly,rebuilt region-month counts equal the panel,PASS,
+D7,Data,Provisional window flagged,4 provisional month(s): 2026-01 to 2026-04,months within 6 months of the As At date are not scored as FAIL,PASS,crime file As At 01 Jun 2026
+D8,Data,Crime release freshness,"As At 01 Jun 2026, 139 days before the check date",WARN if older than 62 days (monthly release),WARN,check data.nt.gov.au for a newer release
+D9,Data,Alcohol supply lag,"latest supply quarter 2025-Q4, 2 quarter(s) behind the latest crime month",WARN if more than 2 quarters behind; Model B only,PASS,supply is context only; the forecasts do not use it
+D10,Data,Population estimates cover the crime months,"population to 2025, crime to 2026-04",WARN if crime months run past the latest population year,WARN,2026 rates use 2025 population [A22]; the panel waits for new estimates [A1]
+P1,Performance,"h=1 XGBoost: skill, last 6 settled origins",28.4% (targets 2025-01 to 2025-06),"WARN < 10%, FAIL < 0%",PASS,
+C1,Performance,"h=1 80% interval coverage, last 12 settled months",80.6% of 72,WARN outside 70-90%,PASS,
+P3,Performance,h=3 Moving average (12m): last 12 settled months,RMSE 104.1 = 0.90 x backtest; skill 17.3%,"WARN if > 1.25 x backtest RMSE, FAIL if skill < 0%",PASS,
+C3,Performance,"h=3 80% interval coverage, last 12 settled months",76.4% of 72,WARN outside 70-90%,PASS,
+P6,Performance,h=6 Moving average (12m): last 12 settled months,RMSE 108.3 = 0.83 x backtest; skill 12.9%,"WARN if > 1.25 x backtest RMSE, FAIL if skill < 0%",PASS,
+C6,Performance,"h=6 80% interval coverage, last 12 settled months",76.4% of 72,WARN outside 70-90%,PASS,
+P12,Performance,h=12 Seasonal naive (t-12): last 12 settled months,RMSE 126.5 = 0.87 x backtest; skill 0.0%,"WARN if > 1.25 x backtest RMSE, FAIL if skill < 0%",PASS,skill is 0 by definition for the seasonal naive
+C12,Performance,"h=12 80% interval coverage, last 12 settled months",73.6% of 72,WARN outside 70-90%,PASS,
+N1,Performance,h=1 XGBoost on newest months (provisional),"RMSE 103.8, skill 37.8%, bias +12.1 (2026-01 to 2026-04)","WARN < 10%, FAIL < 0% (FAIL shown as WARN)",PASS,actuals still being recorded [A23]
+NC1,Performance,h=1 80% interval coverage on newest months (provisional),62.5% of 24,WARN outside 70-90%,WARN,too few months to judge; re-score when final
+N3,Performance,h=3 Moving average (12m) on newest months (provisional),"RMSE 176.6, skill 16.5%, bias +114.5 (2026-03 to 2026-04)","WARN if > 1.25 x backtest RMSE, FAIL if skill < 0% (FAIL shown as WARN)",WARN,actuals still being recorded [A23]
+NC3,Performance,h=3 80% interval coverage on newest months (provisional),58.3% of 12,WARN outside 70-90%,WARN,too few months to judge; re-score when final
+R1,Drift,"Regional rate vs same quarter, previous 3 years",1 region(s) shifted (Oct-Dec 2025),WARN if any region changes by more than 25% [A24],WARN,Central Australia -32%
+R2,Drift,"Alcohol-involved share of assaults, last 12 settled months",44.9% vs 46.9% in the previous 3 years (-2.1 pp),WARN if the share moves more than 5 pp [A24],PASS,
+R3,Drift,"DV-involved share of assaults, last 12 settled months",67.2% vs 66.0% in the previous 3 years (+1.1 pp),WARN if the share moves more than 5 pp [A24],PASS,

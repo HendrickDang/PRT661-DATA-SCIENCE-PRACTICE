@@ -24,7 +24,9 @@ from core_data import (
     YEAR_MAX,
     YEAR_MIN,
     get_regression_panel,
+    latest_population,
     load_data,
+    load_forecast_outputs,
     run_model_training,
 )
 
@@ -138,9 +140,9 @@ year_range = st.sidebar.slider(
 st.sidebar.markdown("---")
 st.sidebar.subheader("🚨 Priority Thresholds")
 rate_threshold = st.sidebar.slider(
-    "Critical Assault Rate Threshold (/100k / month)",
+    "High-Need Rate Threshold (/100k / month)",
     min_value=150, max_value=700, value=350, step=25,
-    help="Per-capita rate that activates frontline surge deployment protocols."
+    help="Per-capita rate above which a region is flagged for additional service capacity."
 )
 
 # Filtered data
@@ -158,6 +160,7 @@ filtered_assault = monthly_assault[
 # -----------------------------------------------------------------------------
 tabs = st.tabs([
     "📊 Executive Briefing & KPIs",
+    "📈 Forecasts & Planning Ranges",
     "🗺️ Crime Map & Spatial Resource Demand",
     "🚨 Resource Priority & Staffing Matrix",
     "📅 Seasonal Surge Calendar",
@@ -210,9 +213,9 @@ with tabs[0]:
         elevated_regs = latest_rates[(latest_rates < rate_threshold) & (latest_rates >= rate_threshold * 0.7)].index.tolist()
 
         if critical_regs:
-            st.markdown(f'<div class="alert-critical">🚨 <b>CRITICAL SURGE REQUIRED</b><br>'
-                        f'Regions exceeding alert threshold ({rate_threshold}/100k): <b>{", ".join(critical_regs)}</b>.<br>'
-                        f'Immediate priority for mobile police patrols and emergency domestic violence shelter capacity.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="alert-critical">🔴 <b>HIGH RESOURCE NEED</b><br>'
+                        f'Regions above the planning threshold ({rate_threshold}/100k): <b>{", ".join(critical_regs)}</b>.<br>'
+                        f'Priority for additional police, domestic violence support and health service capacity.</div>', unsafe_allow_html=True)
         if elevated_regs:
             st.markdown(f'<div class="alert-elevated">⚠️ <b>ELEVATED MONITORING</b><br>'
                         f'Regions in elevated tier: <b>{", ".join(elevated_regs)}</b>.<br>'
@@ -222,9 +225,153 @@ with tabs[0]:
 
 
 # =============================================================================
-# TAB 2: Spatial Crime Map & Resource Demand
+# TAB 2: Forecasts & Planning Ranges (Assessment 4)
 # =============================================================================
+# Reads Outputs/ written by evaluation.py, forecast.py and monitoring.py, so
+# the numbers here are the ones in the final report. Nothing is refitted.
 with tabs[1]:
+    st.subheader("📈 Assault Forecasts and Planning Ranges")
+    fo = load_forecast_outputs()
+    fc_all = fo["forecasts"]
+    mon = fo["monitoring"]
+
+    if fc_all is None:
+        st.info("Forecasts not found. Run `python forecast.py` after the pipeline and "
+                "`evaluation.py` to create Outputs/F1_forecasts.csv.")
+    else:
+        rec = fc_all[fc_all["Recommended"].astype(str) == "True"].copy()
+        origin = pd.to_datetime(rec["Origin"].iloc[0])
+        method_by_h = rec.groupby("Horizon_months")["Model"].first().to_dict()
+
+        # Release check banner (monitoring.py)
+        if mon is not None:
+            css = {"PASS": "alert-baseline", "WARN": "alert-elevated",
+                   "FAIL": "alert-critical"}[mon["overall_status"]]
+            verdict = ("Cleared for planning use; warnings are reviewed at the next release."
+                       if mon["promote_forecasts_to_dashboard"] else
+                       "A release check failed: do not use these forecasts in briefings until reviewed.")
+            st.markdown(
+                f'<div class="{css}"><b>Release check: {mon["overall_status"]}</b> '
+                f'({mon["counts"]["PASS"]} pass, {mon["counts"]["WARN"]} warning, '
+                f'{mon["counts"]["FAIL"]} fail). Crime data as at {mon["crime_data_as_at"]}, '
+                f'checked {mon["check_date"]}.<br>{verdict}</div>',
+                unsafe_allow_html=True)
+        else:
+            st.caption("Release checks have not been run yet (`python monitoring.py`).")
+
+        st.markdown(
+            f"Forecasts made at the end of **{origin:%B %Y}** for each region. Each horizon uses the "
+            f"method with the lowest error in the rolling-origin backtest: "
+            + "; ".join(f"**{h} month{'s' if h > 1 else ''}**: {m}" for h, m in method_by_h.items())
+            + ". The range is an 80% planning range: about four months in five should fall inside it."
+        )
+
+        pop = latest_population(monthly_assault)
+        rec = rec[rec["Region"].isin(selected_regions)].copy()
+        rec["Population"] = rec["Region"].map(pop)
+        for col, out in [("Forecast_rate_100k", "Expected"), ("Lower_80", "Low"), ("Upper_80", "High")]:
+            rec[out] = (rec[col] * rec["Population"] / 100_000).round(0)
+        rec["Target"] = pd.to_datetime(rec["Target_month"]).dt.strftime("%b %Y")
+        rec["Rate range"] = rec.apply(lambda r: f"{r['Lower_80']:.0f} to {r['Upper_80']:.0f}", axis=1)
+        rec["Assault range"] = rec.apply(lambda r: f"{r['Low']:.0f} to {r['High']:.0f}", axis=1)
+        rec["Region"] = pd.Categorical(rec["Region"], REGION_ORDER, ordered=True)
+        table = rec.sort_values(["Region", "Horizon_months"])[
+            ["Region", "Target", "Horizon_months", "Model", "Forecast_rate_100k",
+             "Rate range", "Expected", "Assault range"]]
+        st.dataframe(
+            table,
+            column_config={
+                "Target": "Month",
+                "Horizon_months": st.column_config.NumberColumn("Months ahead", format="%d"),
+                "Model": "Method",
+                "Forecast_rate_100k": st.column_config.NumberColumn("Forecast (/100k)", format="%.0f"),
+                "Rate range": "80% range (/100k)",
+                "Expected": st.column_config.NumberColumn("Expected assaults", format="%.0f"),
+                "Assault range": "80% range (assaults)",
+            },
+            hide_index=True, use_container_width=True,
+        )
+        st.caption("Expected assaults = forecast rate x the region's latest published population "
+                   "(2025). Forecasts are region-level planning ranges, not predictions about "
+                   "communities, places or individuals.")
+
+        # Chart for one region
+        chart_region = st.selectbox("Show forecast chart for", options=[r for r in REGION_ORDER if r in selected_regions])
+        hist = monthly_assault[monthly_assault["Region"] == chart_region].copy()
+        hist["date"] = pd.to_datetime(dict(year=hist["Year"], month=hist["Month number"], day=1))
+        hist = hist[hist["date"] > origin - pd.DateOffset(months=36)].sort_values("date")
+        reg_fc = rec[rec["Region"] == chart_region].copy()
+        reg_fc["date"] = pd.to_datetime(reg_fc["Target_month"])
+
+        fig_fc = go.Figure()
+        fig_fc.add_trace(go.Scatter(x=hist["date"], y=hist["Assault_rate_100k"], mode="lines",
+                                    name="Observed", line=dict(color="#2d3748", width=2)))
+        newest = fo["holdout_predictions"]
+        if newest is not None:
+            new_actual = (newest[newest["Region"] == chart_region]
+                          .drop_duplicates("target")[["target", "actual"]])
+            fig_fc.add_trace(go.Scatter(
+                x=pd.to_datetime(new_actual["target"]), y=new_actual["actual"], mode="markers",
+                name="2026 provisional actuals (not used by the models)",
+                marker=dict(symbol="circle-open", size=9, color="#2d3748")))
+        method_colours = {"XGBoost": "#E53935", "Moving average (12m)": "#1E88E5",
+                          "Seasonal naive (t-12)": "#546E7A"}
+        for model, grp in reg_fc.groupby("Model"):
+            colour = method_colours.get(model, "#8E24AA")
+            fig_fc.add_trace(go.Scatter(
+                x=grp["date"], y=grp["Forecast_rate_100k"], mode="markers",
+                name=f"Forecast: {model}", marker=dict(size=10, color=colour),
+                error_y=dict(type="data", symmetric=False,
+                             array=grp["Upper_80"] - grp["Forecast_rate_100k"],
+                             arrayminus=grp["Forecast_rate_100k"] - grp["Lower_80"],
+                             color=colour, thickness=2, width=6)))
+        fig_fc.add_vline(x=origin, line_dash="dash", line_color="#a0aec0")
+        fig_fc.update_layout(height=460, yaxis_title="Assaults per 100,000",
+                             title=f"{chart_region}: observed rate and forecasts with 80% range",
+                             xaxis=dict(tickformat="%b %Y"),
+                             margin=dict(t=60, b=110),
+                             legend=dict(orientation="h", yanchor="top", y=-0.15, x=0))
+        st.plotly_chart(fig_fc, use_container_width=True)
+
+        with st.expander("How reliable are these forecasts?"):
+            bt = fo["backtest"]
+            pi = fo["intervals"]
+            ho = fo["holdout_metrics"]
+            lines = []
+            if bt is not None:
+                for h, m in method_by_h.items():
+                    row = bt[(bt["Model"] == m) & (bt["Horizon_months"] == h)]
+                    if not row.empty:
+                        r = row.iloc[0]
+                        gain = (f"{r['Skill_%']:.0f}% more accurate than repeating last year's figure."
+                                if m != "Seasonal naive (t-12)" else
+                                "this is last year's figure for the same month; no fitted model beat it this far ahead.")
+                        lines.append(f"- **{h} month{'s' if h > 1 else ''} ahead ({m})**: typical error "
+                                     f"{r['MAE']:.0f} per 100,000 (RMSE {r['RMSE']:.0f}) over {int(r['n'])} past "
+                                     f"forecasts; {gain}")
+            if pi is not None:
+                cov = ", ".join(f"{p['Out_of_sample_coverage_%']:.0f}% at {int(p['Horizon_months'])} m"
+                                for _, p in pi.iterrows())
+                lines.append(f"- **Planning ranges** held the outcome {cov} of the time (target 80%). "
+                             "They are pooled across regions: wider than needed for Greater Darwin, "
+                             "narrower than needed for Barkly and Top End.")
+            if ho is not None:
+                h1 = ho[(ho["Horizon_months"] == 1) & (ho["Recommended"].astype(str) == "True")]
+                if not h1.empty:
+                    r = h1.iloc[0]
+                    lines.append(f"- **First test on 2026 data** ({r['Targets']}, provisional): "
+                                 f"one-month error {r['RMSE']:.0f} against {r['Backtest_RMSE']:.0f} in the backtest.")
+            st.markdown("\n".join(lines))
+
+        if fo["checks"] is not None:
+            with st.expander("Release check details (monitoring.py)"):
+                st.dataframe(fo["checks"][["Status", "Check_id", "Check", "Value", "Note"]],
+                             hide_index=True, use_container_width=True)
+
+# =============================================================================
+# TAB 3: Spatial Crime Map & Resource Demand
+# =============================================================================
+with tabs[2]:
     st.subheader("🗺️ Northern Territory Spatial Crime Distribution")
     st.markdown(
         "Visualise crime density across the Territory. "
@@ -383,9 +530,9 @@ with tabs[1]:
 
 
 # =============================================================================
-# TAB 3: Resource Priority & Staffing Matrix
+# TAB 4: Resource Priority & Staffing Matrix
 # =============================================================================
-with tabs[2]:
+with tabs[3]:
     st.subheader("🚨 Frontline Staffing & Operational Allocation Matrix")
     st.markdown(
         "This decision matrix maps regional risk profiles to clear operational recommendations "
@@ -402,14 +549,14 @@ with tabs[2]:
     def determine_action(row):
         rate = row["Avg_Monthly_Rate"]
         if rate >= rate_threshold:
-            return "URGENT SURGE: Deploy mobile frontline police, expand night crisis shelter, surge hospital ED night staff."
+            return "HIGH NEED: Prioritise additional frontline police, night crisis shelter capacity and hospital ED night staff."
         elif rate >= rate_threshold * 0.7:
             return "ELEVATED ROSTER: Increase targeted liquor compliance checks, maintain active domestic violence outreach."
         else:
             return "STANDARD POSTING: Maintain baseline community policing and primary healthcare schedules."
 
     reg_summary["Alert Status"] = reg_summary["Avg_Monthly_Rate"].apply(
-        lambda r: "🔴 CRITICAL" if r >= rate_threshold else ("🟠 ELEVATED" if r >= rate_threshold * 0.7 else "🟢 BASELINE")
+        lambda r: "🔴 HIGH NEED" if r >= rate_threshold else ("🟠 ELEVATED" if r >= rate_threshold * 0.7 else "🟢 BASELINE")
     )
     reg_summary["Recommended Operational Response"] = reg_summary.apply(determine_action, axis=1)
     reg_summary["Avg_Monthly_Rate"] = reg_summary["Avg_Monthly_Rate"].round(1)
@@ -433,9 +580,9 @@ with tabs[2]:
 
 
 # =============================================================================
-# TAB 4: Seasonal Surge Calendar
+# TAB 5: Seasonal Surge Calendar
 # =============================================================================
-with tabs[3]:
+with tabs[4]:
     st.subheader("📅 Northern Territory Seasonal Surge Calendar")
     st.markdown(
         "Crime in the Northern Territory follows a pronounced seasonal rhythm. "
@@ -490,9 +637,9 @@ with tabs[3]:
 
 
 # =============================================================================
-# TAB 5: Policy Intervention Simulator
+# TAB 6: Policy Intervention Simulator
 # =============================================================================
-with tabs[4]:
+with tabs[5]:
     st.subheader("🎯 Policy Intervention & Scenario Simulator")
     st.markdown(
         "Test real-world policy levers: **Simulate the expected impact of wholesale alcohol supply restrictions "
@@ -597,20 +744,20 @@ with tabs[4]:
 
         # Actionable Recommendation
         if pred_rate >= rate_threshold:
-            st.markdown('<div class="alert-critical">🚨 <b>CRITICAL SURGE TIER</b><br>'
-                        'Projected rate exceeds alert threshold. Mandate maximum frontline patrol deployment and standby emergency shelter intake.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="alert-critical">🔴 <b>HIGH NEED TIER</b><br>'
+                        'Projected rate is above the planning threshold. Plan for additional frontline and crisis support capacity.</div>', unsafe_allow_html=True)
         elif pred_rate >= rate_threshold * 0.7:
             st.markdown('<div class="alert-elevated">⚠️ <b>ELEVATED RISK TIER</b><br>'
-                        'Moderate surge anticipated. Target point-of-sale liquor enforcement.</div>', unsafe_allow_html=True)
+                        'Moderate increase projected. Consider targeted point-of-sale liquor compliance.</div>', unsafe_allow_html=True)
         else:
             st.markdown('<div class="alert-baseline">✅ <b>BASELINE OPERATIONAL TIER</b><br>'
                         'Standard staffing allocation is sufficient.</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
-# TAB 6: Briefing Note Export
+# TAB 7: Briefing Note Export
 # =============================================================================
-with tabs[5]:
+with tabs[6]:
     st.subheader("📥 Export Executive Briefing & Data Extracts")
     st.markdown("Generate formatted tables and extracts for ministerial briefings, cabinet submissions, and police briefings.")
 

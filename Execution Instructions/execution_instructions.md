@@ -107,7 +107,31 @@ rate = np.expm1(model.predict(X[bundle["features"]]))   # X: rows built like eva
 
 Saved models load only with the pinned versions in `requirements.txt` (including `joblib==1.4.2`).
 
-## 6. Verify the output
+## 6. Run the release checks
+
+```bash
+python monitoring.py --as-of 2026-10-18
+```
+
+Run after step 5, and after every new crime statistics release (without `--as-of` the check date is today). Takes a few seconds and refits nothing. Writes:
+
+| File | Contents |
+| --- | --- |
+| `Outputs/M1_monitoring_checks.csv` | One row per check: area, value, rule, PASS / WARN / FAIL and a note |
+| `Outputs/M2_monitoring_scored.csv` | Every scored forecast: month, region, horizon, method, actual, forecast, error, inside the 80% interval or not, settled or provisional |
+| `Outputs/M3_monitoring_summary.json` | Overall status, counts, and the decisions to promote the forecasts and whether to retrain |
+
+The console ends with the overall result, `Promote forecasts to the dashboard: yes/no` and the retraining decision.
+
+## 7. Run the dashboard
+
+```bash
+streamlit run app.py
+```
+
+Opens at http://localhost:8501 (on Windows, `run_dashboard.bat` does the same). The Administrator Portal's **Forecasts & Planning Ranges** tab and the Workbench's **Backtest, Forecasts & Monitoring** tab read the files from steps 4-6. To host it, see "Hosted version" in the root `README.md` (Streamlit Community Cloud, Python 3.11).
+
+## 8. Verify the output
 
 The pipeline should end with `PIPELINE COMPLETE`. Key figures to check against the report:
 
@@ -120,6 +144,8 @@ The pipeline should end with `PIPELINE COMPLETE`. Key figures to check against t
 The evaluation module should report XGBoost best at h=1 (RMSE 99.8), the 12-month moving average best at h=3 and h=6 (116.3 and 130.4), and the seasonal naive benchmark best at h=12 (145.5). The moving-average and seasonal-naive figures are identical on every platform.
 
 The forecast stage should print that 2025 rebuilt from the raw file matches the panel exactly, find 24 region-months after the panel (2026-01 to 2026-04), and report on those months an h=1 RMSE of 80.5 for linear regression and 103.8 for XGBoost.
+
+The release checks with `--as-of 2026-10-18` should end with `Monitoring result: WARN (19 PASS, 6 WARN, 0 FAIL)` and `Promote forecasts to the dashboard: yes`.
 
 ## Troubleshooting
 
