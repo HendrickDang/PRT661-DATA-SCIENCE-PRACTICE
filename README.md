@@ -56,6 +56,8 @@ python Updated_End_to_End_pipeline.py
 
 Runs five stages in a single pass: ingest to `dataset/raw/`, panel build to `dataset/processed/`, EDA to `eda_plots/`, PCA, and the regression stage to `regression_plots/`.
 
+Ingest checks every source file before writing anything: required columns (spacing and case differences in headers are tolerated), numeric years, months 1-12, non-negative counts, alcohol and DV flags limited to `Yes` / `No` / `-`, and readable quarter dates. If any file fails, or is missing, the run stops with a `SCHEMA ERROR` or `SKIPPED` line and `dataset/raw/` keeps the last good copies. The checks are tested in `tests/test_ingest_schema.py` (`python -m unittest discover tests`).
+
 The regression stage also writes its tables to `Outputs/` (`R1_feature_variants_cv.csv`, `R4_model_a_metrics.csv`, `R9_per_region_accuracy.csv`, `R10_model_b_metrics.csv`) so reports and slides quote files instead of console output.
 
 Headline result (single train/test split, train 2016-2022, test 2023-2025): XGBoost is the strongest model at RMSE 117.7 per 100,000, against 125.2 for linear regression and Ridge and 184.0 for Lasso. The gap between XGBoost and the linear models is about 6%. Feature variant V4 is selected on cross-validation, and the tuned XGBoost parameters are `max_depth=3, learning_rate=0.05, reg_alpha=1.0, reg_lambda=3.0`.
@@ -191,6 +193,7 @@ In Assessment 2 the two scales disagreed (V4 on the log scale, V2 on the rate sc
 | `diagrams/` | Architecture and workflow diagrams |
 | `Reports/` | Assessment reports |
 | `audit/` | Assessment 3 read-only data lineage, reproducibility and leakage audit |
+| `tests/` | Tests for the ingest schema check; they run ingest in a temporary copy and never write to `dataset/` |
 | `Environment Setup Instructions/` | Environment setup, including `requirements.txt` |
 | `Execution Instructions/` | Run instructions |
 | `CHANGELOG.md` | Change log: all changes since Assessment 1, with justification |
