@@ -39,7 +39,8 @@ ASSUMPTION LOG - the non-obvious decisions, referenced as [A#] in the code.
 [A10] The regression panel uses a complete region x month grid so the lags are
       true calendar lags - otherwise the [A3] gap makes Dec-2023 lag1 point at
       October.
-[A11] Model A: no alcohol features, train 2015-2022, test 2023-2025.
+[A11] Model A: no alcohol features, train 2016-2022, test 2023-2025. 2015 is
+      used only as lag-12 history (audit/README.md, Finding 1).
 [A12] Model B: adds alcohol_per_capita, train 2023-2024, test 2025. Different
       training window from Model A, so the errors are NOT comparable.
 [A13] CV rows are sorted by date before TimeSeriesSplit. Sorted by region, the
@@ -1628,7 +1629,7 @@ def model_b_with_alcohol(panel: pd.DataFrame,
     [A19] Three specifications are fitted on IDENTICAL rows, so the only thing
     that differs between them is the alcohol feature:
       - "none"             the Model A features alone, on the Model B window.
-                           Model A itself is fitted on 2015-2022, so its error
+                           Model A itself is fitted on 2016-2022, so its error
                            cannot be compared with Model B's [A12]; this row can.
       - "same quarter"     supply of the quarter being predicted. Association
                            only: that figure is not published in time to forecast.

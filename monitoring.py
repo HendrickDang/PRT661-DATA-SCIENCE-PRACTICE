@@ -49,8 +49,8 @@ Outputs/M2_monitoring_scored.csv     every scored forecast: month, region, horiz
 Outputs/M3_monitoring_summary.json   overall status and the two decisions:
                                      promote the forecasts? retrain the models?
 
-Nothing here refits a model or changes an earlier output. The check date is
-recorded so a later run can be compared with this one.
+Nothing here refits a model or changes an earlier output. Each run overwrites
+M1-M3 and records its check date in M3; earlier runs are kept in Git history.
 """
 
 from __future__ import annotations
@@ -264,7 +264,32 @@ def coverage_out_of_sample(sub: pd.DataFrame, months: list) -> tuple[float, int]
 
 
 def performance_checks(log: Log) -> tuple[pd.DataFrame, dict]:
+    """P and C checks re-read the backtest (Outputs/E4_*), so the "settled
+    months" are the latest backtest targets (January to June 2025 for the
+    current panel). Months after the backtest window but outside the
+    provisional window (July to December 2025 for the 1 June 2026 release)
+    are not scored until evaluation.py is re-run on an extended panel. The N
+    checks score the newest months from forecast.py (E6).
+
+    Note on long-horizon RMSE ratios: the rolling-window RMSE is compared to
+    the full-backtest RMSE from the same E4 files (not a separately frozen
+    deploy baseline). A ratio well above 1 still flags recent degradation;
+    ratios below 1 are common because the window overlaps the backtest.
+    """
     print("\n[monitor] P - forecast performance")
+    required = [
+        OUT_DIR / "E4_backtest_metrics.csv",
+        OUT_DIR / "E4_backtest_predictions.csv",
+        OUT_DIR / "E5_prediction_intervals.csv",
+    ]
+    missing = [p.name for p in required if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "monitoring.py needs evaluation outputs before scoring forecasts. "
+            f"Missing: {', '.join(missing)}. "
+            "Run: python evaluation.py   (then python forecast.py for N-checks / E6)."
+        )
+
     winners, intervals = fc.recommended_by_horizon()
     backtest_rmse = (pd.read_csv(OUT_DIR / "E4_backtest_metrics.csv")
                      .set_index(["Model", "Horizon_months"])["RMSE"])
@@ -296,6 +321,7 @@ def performance_checks(log: Log) -> tuple[pd.DataFrame, dict]:
             last_months = sorted(sub["target"].unique())[-LONG_ROLLING_MONTHS:]
             window = sub[sub["target"].isin(last_months)]
             n_window = naive[naive["target"].isin(last_months)]
+            # ratio = recent-window RMSE / full E4 backtest RMSE (same run; see docstring)
             r = rmse(window["error"])
             ratio = r / float(backtest_rmse[(model, h)])
             s = skill(r, rmse(n_window["error"]))
