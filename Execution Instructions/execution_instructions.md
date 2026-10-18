@@ -154,4 +154,5 @@ The release checks with `--as-of 2026-10-18` should end with `Monitoring result:
 | `ModuleNotFoundError: openpyxl` | Dependencies not installed; `openpyxl` is needed to read the `.xlsx` sources |
 | `TypeError: 'type' object is not subscriptable` | Running `End to End pipeline.py` on Python 3.8; use the nominated file instead |
 | `FileNotFoundError` in Stage 1 | Not running from the repository root, or `dataset/source/` is incomplete |
+| `SCHEMA ERROR` in Stage 1, then `STOPPED` | A source file has a missing or renamed column or unexpected values (the line names them). Nothing was written; fix or re-download the file. Run `python -m unittest discover tests` to check the ingest checks themselves |
 | XGBoost figures differ from the report | `xgboost` version differs from the pin (check with `pip show xgboost`), or the run is not on Linux x86_64 |
