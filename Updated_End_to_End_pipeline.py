@@ -10,8 +10,9 @@ End-to-end pipeline for the PRT661 NT assault forecasting project
                 -> Outputs/R*.csv + pipeline_run_summary.json (result tables)
 
 Ingest is the only stage that touches the raw downloads, so portal renames and
-Excel sheet names stay in one place. A missing source file stops the run before
-any analysis happens.
+Excel sheet names stay in one place. A missing source file, or one that fails
+the schema check (check_schema), stops the run before anything is written to
+dataset/raw/, so the last good copies stay in place.
 
 ---------------------------------------------------------------------------
 ASSUMPTION LOG - the non-obvious decisions, referenced as [A#] in the code.
@@ -232,6 +233,78 @@ def validate(df: pd.DataFrame) -> list:
     return issues
 
 
+# Columns every release must carry, read from the files the panel was built
+# on. Names are compared stripped and lower-cased, so the header drift already
+# seen between crime releases ('Offence type ', 'Reporting Region') passes.
+CRIME_COLUMNS = ["As At", "Year", "Month number", "Offence category", "Offence type",
+                 "Alcohol involvement", "DV involvement", "Reporting region",
+                 "Statistical Area 2", "Number of offences"]
+POPULATION_COLUMNS = ["Year", "Status", "Sex", "Age Group", "Aboriginal status",
+                      "Region", "Population"]
+ALCOHOL_COLUMNS = ["Region", "Quarter Ending", "Cask Wine PAC", "Bottled Wine PAC",
+                   "Fortified Wine PAC", "Cider PAC", "Standard Spirits PAC",
+                   "Mixed Spirits PAC", "Full-Strength Beer PAC", "Mid-Strength Beer PAC",
+                   "Low-Strength Beer PAC", "Total PAC"]
+REQUIRED_COLUMNS = {"crime_old": CRIME_COLUMNS, "crime_new": CRIME_COLUMNS,
+                    "population": POPULATION_COLUMNS, "alcohol_2023": ALCOHOL_COLUMNS,
+                    "alcohol_2024": ALCOHOL_COLUMNS, "alcohol_2025": ALCOHOL_COLUMNS}
+# [A8] maps these to 1/0. Any other value would silently become 0 there.
+FLAG_VALUES = {"Yes", "No", "-"}
+
+
+def check_schema(name: str, df: pd.DataFrame) -> list:
+    """Errors that make a source file unsafe to ingest. Unlike validate(),
+    any error stops the run: a renamed column or a new flag value would
+    otherwise pass ingest and corrupt the panel without a clear message."""
+    errors = []
+    if df.empty:
+        return ["file has no rows"]
+    cols = {str(c).strip().lower(): c for c in df.columns}
+    missing = [c for c in REQUIRED_COLUMNS[name] if c.lower() not in cols]
+    if missing:
+        return [f"missing required column(s): {missing}"]
+
+    def col(label: str) -> pd.Series:
+        return df[cols[label.lower()]]
+
+    def numeric(label: str, minimum=None, integer=False) -> pd.Series:
+        values = pd.to_numeric(col(label), errors="coerce")
+        bad = values.isna()
+        if minimum is not None:
+            bad |= values < minimum
+        if integer:
+            bad |= (values % 1) != 0
+        if bad.any():
+            sample = col(label)[bad].astype(str).unique()[:5].tolist()
+            errors.append(f"'{label}': {int(bad.sum())} invalid value(s), e.g. {sample}")
+        return values
+
+    if name.startswith("crime"):
+        numeric("Year", integer=True)
+        months = numeric("Month number", integer=True)
+        if months.notna().any() and not months.dropna().between(1, 12).all():
+            errors.append("'Month number' outside 1-12")
+        numeric("Number of offences", minimum=0)
+        for flag in ("Alcohol involvement", "DV involvement"):
+            unexpected = set(col(flag).astype(str).str.strip()) - FLAG_VALUES
+            if unexpected:
+                errors.append(f"'{flag}' has unexpected value(s) {sorted(unexpected)}; "
+                              f"expected {sorted(FLAG_VALUES)}")
+        # Statistical Area 2 is legitimately blank outside NT Balance rows.
+        for label in ("Offence category", "Reporting region"):
+            if col(label).isna().any():
+                errors.append(f"'{label}' has {int(col(label).isna().sum())} blank value(s)")
+    elif name == "population":
+        numeric("Year", integer=True)
+        numeric("Population", minimum=0)
+    else:
+        unparsed = pd.to_datetime(col("Quarter Ending"), errors="coerce").isna()
+        if unparsed.any():
+            errors.append(f"'Quarter Ending': {int(unparsed.sum())} value(s) are not dates")
+        numeric("Total PAC", minimum=0)
+    return errors
+
+
 def ingest_main() -> None:
     banner("STAGE 1 - INGEST: dataset/source/ -> dataset/raw/")
     print(f"[ingest] project root: {BASE_DIR}")
@@ -239,10 +312,12 @@ def ingest_main() -> None:
     if not SOURCE_DIR.exists():
         print("[ingest] WARNING: that folder does not exist. Create dataset/source/ "
               "next to this script and put the 6 raw files in it.\n")
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
     manifest = {"ingested_at_utc": datetime.now(timezone.utc).isoformat(), "datasets": {}}
+    loaded = {}
     had_error = False
 
+    # Everything is loaded and checked before anything is written, so a bad
+    # file never leaves dataset/raw/ holding a mix of old and new copies.
     for name, spec in EXPECTED_FILES.items():
         print(f"[ingest] loading {name} <- dataset/source/{spec['filename']}")
         try:
@@ -252,13 +327,28 @@ def ingest_main() -> None:
             had_error = True
             continue
 
+        errors = check_schema(name, df)
+        for error in errors:
+            print(f"  SCHEMA ERROR: {error}")
+        if errors:
+            had_error = True
+            continue
+
         issues = validate(df)
         for issue in issues:
             print(f"  WARNING: {issue}")
+        loaded[name] = (spec, df, issues)
+        print(f"  OK: {len(df):,} rows, {len(df.columns)} columns, schema check passed")
 
+    if had_error:
+        print("\n[ingest] STOPPED: see the SKIPPED / SCHEMA ERROR lines above. Nothing "
+              "was written; dataset/raw/ still holds the last good ingest.")
+        sys.exit(1)
+
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    for name, (spec, df, issues) in loaded.items():
         out_path = RAW_DIR / f"{name}.csv"
         write_csv(df, out_path)
-
         manifest["datasets"][name] = {
             "source_file": spec["filename"],
             "rows": len(df),
@@ -266,15 +356,11 @@ def ingest_main() -> None:
             "saved_to": str(out_path.relative_to(BASE_DIR)),
             "issues": issues,
         }
-        print(f"  OK: {len(df):,} rows, {len(df.columns)} columns -> {out_path.name}")
+        print(f"  saved: {out_path.name}")
 
     manifest_path = RAW_DIR / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))
     print(f"\n[ingest] manifest written to {manifest_path.name}")
-
-    if had_error:
-        print("\n[ingest] finished WITH missing files - see SKIPPED lines above.")
-        sys.exit(1)
     print("[ingest] finished OK.")
 
 
