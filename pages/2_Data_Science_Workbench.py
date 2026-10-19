@@ -124,19 +124,30 @@ with ds_tabs[0]:
     col_a1, col_a2 = st.columns([3, 2])
     with col_a1:
         st.markdown("##### Pipeline Stage Execution Diagram")
-        st.code("""
-  [dataset/source/]
-       │
-       ▼ (Stage 1: Ingest & Schema Alignment)
-  [dataset/raw/*.csv + manifest.json]
-       │
-       ▼ (Stage 2: Regional Harmonisation & Aggregation [A5, A8])
-  [dataset/processed/nt_crime_merged_2015_2025.csv]  (13,629 rows x 44 cols)
-       │
-       ├───────────────────────────────┬───────────────────────────────┐
-       ▼ (Stage 3: EDA & Correlation)  ▼ (Stage 4: PCA Demographics)  ▼ (Stage 5: Time-Series Regression)
-  [eda_plots/*.png]              [Age-Structure Shares]         [Feature Variants -> VIF -> Tuning -> Final Models]
-        """, language="text")
+        # Drawn with Graphviz so it scales to the column width instead of
+        # overflowing like a fixed-width text block.
+        st.graphviz_chart("""
+digraph pipeline {
+  graph [rankdir=TB, nodesep=0.25, ranksep=0.3, fontname="Helvetica"];
+  node  [shape=box, style="rounded,filled", fillcolor="#F7FAFC", color="#4A5568",
+         fontname="Helvetica", fontsize=12, margin="0.12,0.05"];
+  edge  [color="#4A5568", fontname="Helvetica", fontsize=9];
+  src   [label="dataset/source/\n6 NTG open-data files"];
+  raw   [label="Stage 1: Ingest + schema check\ndataset/raw/*.csv, manifest.json"];
+  proc  [label="Stage 2: Regional harmonisation [A5, A8]\nnt_crime_merged_2015_2025.csv\n(13,629 rows x 44 cols)"];
+  eda   [label="Stage 3: EDA\neda_plots/*.png"];
+  pca   [label="Stage 4: PCA\nage-structure shares"];
+  reg   [label="Stage 5: Regression\nModel A / B, Outputs/R*"];
+  ev    [label="evaluation.py\nbacktest h = 1-12, Outputs/E*"];
+  fc    [label="forecast.py\nforecasts + 80% ranges, Outputs/F1"];
+  mon   [label="monitoring.py\nrelease checks, Outputs/M*"];
+  src -> raw -> proc;
+  proc -> eda; proc -> pca; proc -> reg;
+  proc -> ev -> fc -> mon;
+  {rank=same; eda; pca; reg}
+  pca -> ev [style=invis];
+}
+""", use_container_width=True)
 
     with col_a2:
         if MANIFEST_JSON.exists():
