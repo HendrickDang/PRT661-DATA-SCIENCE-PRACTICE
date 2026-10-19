@@ -153,7 +153,8 @@ digraph pipeline {
         if MANIFEST_JSON.exists():
             st.markdown("##### Raw Ingest Manifest (`manifest.json`)")
             manifest_dict = json.loads(MANIFEST_JSON.read_text())
-            st.json(manifest_dict)
+            # Show the load date and file names; click a file to see its details.
+            st.json(manifest_dict, expanded=2)
         else:
             st.info("Manifest file not found.")
 
