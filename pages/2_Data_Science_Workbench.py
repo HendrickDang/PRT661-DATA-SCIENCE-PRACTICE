@@ -153,8 +153,13 @@ digraph pipeline {
         if MANIFEST_JSON.exists():
             st.markdown("##### Raw Ingest Manifest (`manifest.json`)")
             manifest_dict = json.loads(MANIFEST_JSON.read_text())
-            # Show the load date and file names; click a file to see its details.
-            st.json(manifest_dict, expanded=2)
+            # Closed by default so the full file list doesn't fill the column.
+            with st.expander(
+                f"Last ingest: {manifest_dict['ingested_at_utc'][:10]} · "
+                f"{len(manifest_dict['datasets'])} source files (click to view)",
+                expanded=False,
+            ):
+                st.json(manifest_dict, expanded=2)
         else:
             st.info("Manifest file not found.")
 
