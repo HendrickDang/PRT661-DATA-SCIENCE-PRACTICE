@@ -24,7 +24,7 @@ Project changes since Assessment 1, with justification. Referenced from Section 
 - **Forecasts & Planning Ranges tab** in the Administrator Portal: forecasts for every region at 1, 3, 6 and 12 months from `Outputs/F1_forecasts.csv`, the 80% range, the expected number of assaults per month (rate x latest population), a chart against the 2026 provisional actuals, a plain-language reliability note, and the release-check status from `monitoring.py`. Closes the open item "Dashboard multi-horizon view".
 - **Backtest, Forecasts & Monitoring tab** in the Data Science Workbench: backtest RMSE by horizon, bootstrap, interval coverage, the 2026 check and the full release-check table. Assumption log extended to [A24].
 - **Neutral wording.** "Critical surge" alerts renamed "High resource need" and the staffing tiers "High need / Elevated / Baseline", so a region is described by its need for services rather than as a problem. Justification: responsible-use commitment in the Assessment 2 ethics section.
-- **Hosting.** A root `requirements.txt` (copy of the pinned environment) lets Streamlit Community Cloud build the app; deploy with Python 3.11.
+- **Hosting.** A root `requirements.txt` (copy of the pinned environment) lets Streamlit Community Cloud build the app with Python 3.11. Deployed on 19 October 2026 at https://nt-safety-forecast.streamlit.app; every push to `main` redeploys it.
 
 ### Forecast stage (`forecast.py`, new)
 

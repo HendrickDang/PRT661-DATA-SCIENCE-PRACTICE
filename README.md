@@ -15,6 +15,8 @@ Charles Darwin University, Semester 2 2026. Unit coordinator Dr Reem Sherif, gro
 
 Project board: https://hendrickdang.atlassian.net/jira/software/projects/SCRUM/boards/1/timeline?rangeMode=WEEKS
 
+Live dashboard: https://nt-safety-forecast.streamlit.app
+
 ## Problem
 
 Assault rates vary substantially across the six NT Government service regions. PFES needs month-ahead forecasts at regional granularity to inform resource allocation. The project produces forecasts at 1, 3, 6 and 12 month horizons, with prediction intervals, from 2015-2025 crime data joined to regional population and wholesale alcohol supply.
@@ -161,6 +163,8 @@ Shared loading and model training live in `core_data.py` (cached). Do **not** ru
 The forecast tab and the Workbench's backtest tab read `Outputs/` (F1, E4-E6, M1-M3) and refit nothing, so they always show the figures in the report. The Model A/B tabs still retrain the suite from the processed panel for interactive inspection, with the same features and tuning rules as the pipeline. The policy scenario simulator is illustrative: its pass-through factors are assumptions, not estimates. Priority tiers use neutral wording (High need, Elevated, Baseline): they describe a need for services, not a judgement about a community.
 
 ### Hosted version (Streamlit Community Cloud)
+
+Live app: **https://nt-safety-forecast.streamlit.app** (deployed 19 October 2026). On the free tier the app sleeps when idle and wakes on the first visit, and the first load after a restart takes about a minute while the Workbench fits its diagnostic models.
 
 The dashboard is deployed from this repository's `main` branch: share.streamlit.io, New app, repository `HendrickDang/PRT661-DATA-SCIENCE-PRACTICE`, branch `main`, main file `app.py`, and under Advanced settings **Python 3.11** (the pinned NumPy 1.24.4 has no wheels for Python 3.12 or later). Streamlit Cloud installs from the root `requirements.txt`, a copy of `Environment Setup Instructions/requirements.txt`; keep the two identical. Every push to `main` redeploys the app. The cloud host is Linux x86_64 with Python 3.11, the reference environment, so the hosted numbers match the report.
 
