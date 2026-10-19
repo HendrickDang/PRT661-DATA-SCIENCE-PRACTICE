@@ -26,6 +26,19 @@ Project changes since Assessment 1, with justification. Referenced from Section 
 - **Neutral wording.** "Critical surge" alerts renamed "High resource need" and the staffing tiers "High need / Elevated / Baseline", so a region is described by its need for services rather than as a problem. Justification: responsible-use commitment in the Assessment 2 ethics section.
 - **Hosting.** A root `requirements.txt` (copy of the pinned environment) lets Streamlit Community Cloud build the app with Python 3.11. Deployed on 19 October 2026 at https://nt-safety-forecast.streamlit.app; every push to `main` redeploys it.
 
+### Dashboard: response to the Assessment 3 feedback
+
+- **No prescriptive or causal claims.** The "Key Policy Takeaways" claim that curbing liquor supply "yields direct reductions" in violence is replaced by the project's finding (positive association, no forecast gain). The staffing matrix's "Prescribed Resource Action" column becomes a descriptive "Planning note", the seasonal "Recommended Seasonal Staffing Schedule" becomes a pattern computed from the data, and alert boxes no longer recommend enforcement actions. Justification: the marker noted that deployment recommendations were not validated by the evidence.
+- **Simulator relabelled and explained.** It is an "Illustrative Sensitivity Scenario"; an expander states the assumed 0.4 and 0.2 pass-through factors, the lag settings and that no action should follow without validation. "Fewer assault victims from the policy intervention" becomes a neutral difference from the no-change scenario.
+- **Saved artefacts.** The scenario uses the saved `Models/model_a.joblib` ([A21]) instead of an in-session refit, and the Workbench lists every saved bundle (file, horizon, models, features, training period, versions).
+- **Training dates reconciled.** The Workbench sidebar and [A11] now say January 2016 to December 2022; 2015 supplies lag history only, as in the audit and the report.
+
+### Repository housekeeping
+
+- **Automated tests (`.github/workflows/tests.yml`, new).** On every push to `main` and every pull request, GitHub Actions installs the pinned environment on Python 3.11, runs the 17 ingest schema tests and loads all three dashboard pages.
+- **pyarrow capped below 26** in both requirements files. pyarrow 26.0.0 (9 October 2026) requires NumPy 2; with `numpy==1.24.4` a fresh install could not open the Administrator Portal or the Workbench (checked: `ImportError: pyarrow requires NumPy 2.0 or newer`). With pyarrow 25.0.1 all three pages load. No result changes.
+- **Figure viewer fixed.** Choosing the EDA folder in the Workbench showed the regression figures, because the code looked for "EDA" in a label that does not contain it. It now shows the 13 EDA figures.
+
 ### Forecast stage (`forecast.py`, new)
 
 - **Forecasts with intervals (F1).** Every region is forecast 1, 3, 6 and 12 months ahead of December 2025, using the method with the lowest backtest RMSE at each horizon and its empirical 80% interval. `Outputs/F1_forecasts.csv` is in a long format the dashboard can read directly. Justification: the project goal is a forecast PFES can plan with; until now the repository held only evaluations of forecasts.

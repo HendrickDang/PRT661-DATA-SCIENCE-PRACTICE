@@ -27,6 +27,7 @@ from core_data import (
     latest_population,
     load_data,
     load_forecast_outputs,
+    load_saved_model_a,
     run_model_training,
 )
 
@@ -198,10 +199,10 @@ with tabs[0]:
     # High-level summary narrative
     c_left, c_right = st.columns([3, 2])
     with c_left:
-        st.markdown("#### 📌 Key Policy Takeaways")
+        st.markdown("#### 📌 Key Findings")
         st.markdown(f"""
         - **Assault is the #1 Crime Challenge**: Violent crime accounts for the largest demand on Northern Territory Police and hospital emergency departments.
-        - **High Alcohol & Domestic Violence Nexus**: **{alc_assault_share:.1f}%** of all recorded assaults are alcohol-involved, and **{dv_assault_share:.1f}%** involve domestic or family violence. Policy interventions curbing secondary liquor supply yield direct reductions in violent incidents.
+        - **High Alcohol & Domestic Violence Nexus**: **{alc_assault_share:.1f}%** of all recorded assaults are alcohol-involved, and **{dv_assault_share:.1f}%** involve domestic or family violence. Wholesale alcohol supply is positively associated with assault rates, but it did not improve the forecasts and its causal effect is not established (report, item 5.3).
         - **Per-Capita Disparity**: Greater Darwin generates the largest absolute headcount of incidents due to its population size (over 60% of NT residents), but remote regional jurisdictions (such as Central Australia and Barkly) suffer from significantly higher per-capita assault rates.
         """)
 
@@ -215,11 +216,11 @@ with tabs[0]:
         if critical_regs:
             st.markdown(f'<div class="alert-critical">🔴 <b>HIGH RESOURCE NEED</b><br>'
                         f'Regions above the planning threshold ({rate_threshold}/100k): <b>{", ".join(critical_regs)}</b>.<br>'
-                        f'Priority for additional police, domestic violence support and health service capacity.</div>', unsafe_allow_html=True)
+                        f'Candidates for a capacity review at the next planning cycle, alongside local operational knowledge.</div>', unsafe_allow_html=True)
         if elevated_regs:
             st.markdown(f'<div class="alert-elevated">⚠️ <b>ELEVATED MONITORING</b><br>'
                         f'Regions in elevated tier: <b>{", ".join(elevated_regs)}</b>.<br>'
-                        f'Targeted liquor licensing enforcement recommended.</div>', unsafe_allow_html=True)
+                        f'Watch at the next data release; compare with the forecast ranges.</div>', unsafe_allow_html=True)
         if not critical_regs and not elevated_regs:
             st.markdown('<div class="alert-baseline">✅ <b>BASELINE OPERATIONAL TIER</b><br>All selected jurisdictions are operating within standard historical limits.</div>', unsafe_allow_html=True)
 
@@ -535,8 +536,10 @@ with tabs[2]:
 with tabs[3]:
     st.subheader("🚨 Frontline Staffing & Operational Allocation Matrix")
     st.markdown(
-        "This decision matrix maps regional risk profiles to clear operational recommendations "
-        "for police roster managers, ambulance deployment, and crisis accommodation providers."
+        "This matrix ranks regions by their historical assault rate to support planning discussions. "
+        "The tiers describe recorded demand against the threshold set in the sidebar; they are not "
+        "validated resource prescriptions, and decisions should combine them with the forecasts and "
+        "local operational knowledge."
     )
 
     reg_summary = filtered_assault.groupby("Region").agg(
@@ -549,16 +552,16 @@ with tabs[3]:
     def determine_action(row):
         rate = row["Avg_Monthly_Rate"]
         if rate >= rate_threshold:
-            return "HIGH NEED: Prioritise additional frontline police, night crisis shelter capacity and hospital ED night staff."
+            return "Above the planning threshold: review capacity with regional managers."
         elif rate >= rate_threshold * 0.7:
-            return "ELEVATED ROSTER: Increase targeted liquor compliance checks, maintain active domestic violence outreach."
+            return "Within 30% of the threshold: watch the next release and the forecast range."
         else:
-            return "STANDARD POSTING: Maintain baseline community policing and primary healthcare schedules."
+            return "Below the threshold: no change indicated by recorded demand."
 
     reg_summary["Alert Status"] = reg_summary["Avg_Monthly_Rate"].apply(
         lambda r: "🔴 HIGH NEED" if r >= rate_threshold else ("🟠 ELEVATED" if r >= rate_threshold * 0.7 else "🟢 BASELINE")
     )
-    reg_summary["Recommended Operational Response"] = reg_summary.apply(determine_action, axis=1)
+    reg_summary["Planning note"] = reg_summary.apply(determine_action, axis=1)
     reg_summary["Avg_Monthly_Rate"] = reg_summary["Avg_Monthly_Rate"].round(1)
     reg_summary["Alcohol_Share"] = reg_summary["Alcohol_Share"].round(1).astype(str) + "%"
     reg_summary["DV_Share"] = reg_summary["DV_Share"].round(1).astype(str) + "%"
@@ -572,7 +575,7 @@ with tabs[3]:
             "Total_Assaults": st.column_config.NumberColumn("Total Assaults", format="%d"),
             "Alcohol_Share": "Alcohol %",
             "DV_Share": "DV %",
-            "Recommended Operational Response": "Prescribed Resource Action"
+            "Planning note": "Planning note (descriptive)"
         },
         use_container_width=True,
         hide_index=True
@@ -610,13 +613,18 @@ with tabs[4]:
         st.plotly_chart(fig_season, use_container_width=True)
 
     with s_col2:
-        st.markdown("##### 📋 Recommended Seasonal Staffing Schedule:")
-        st.markdown("""
-        - **October Pre-Surge**: Complete leave rotations and ensure emergency department staffing is finalized before the November monsoon onset.
-        - **November – January (Peak Surge)**: Implement maximum mobile police rosters, enforce Banned Drinker Register (BDR) compliance, and open supplementary crisis shelter beds.
-        - **February – April**: Monitor secondary surge following holiday periods; focus on youth outreach and community transport.
-        - **May – September (Dry Season Reset)**: Baseline demand period; optimal window for officer training, fleet maintenance, and regional infrastructure upgrades.
+        st.markdown("##### 📋 Seasonal Pattern in the Selected Period")
+        wet_mean = monthly_season.loc[monthly_season["Month number"].isin([11, 12, 1, 2, 3, 4]), "Assault_offences"].mean()
+        dry_mean = monthly_season.loc[~monthly_season["Month number"].isin([11, 12, 1, 2, 3, 4]), "Assault_offences"].mean()
+        top3 = monthly_season.sort_values("Assault_offences", ascending=False)["Month"].head(3).tolist()
+        diff_pct = (wet_mean / dry_mean - 1) * 100 if dry_mean else 0.0
+        st.markdown(f"""
+        - **Wet season (Nov to Apr)**: on average **{wet_mean:,.0f}** recorded assaults per calendar month across the selected years.
+        - **Dry season (May to Oct)**: on average **{dry_mean:,.0f}**, so the wet season is **{diff_pct:+.0f}%** different.
+        - **Highest months**: {", ".join(top3)}.
         """)
+        st.caption("Descriptive pattern from recorded data. Leave and roster timing should be planned with the "
+                   "forecasts and their 80% ranges (Forecasts & Planning Ranges tab), not from this chart alone.")
 
     # Year x Month Matrix
     st.markdown("---")
@@ -671,15 +679,23 @@ with tabs[5]:
         sim_lag1 = st.number_input("Prior Month Assault Rate (/100k):", value=round(def_lag1, 1), step=10.0)
 
     with sim_col2:
-        st.markdown("##### 📊 Projected Operational Outcome")
+        st.markdown("##### 📊 Illustrative Sensitivity Scenario")
 
         # Feature vector. The models use the PREVIOUS month's alcohol- and
         # DV-flagged assault counts (pipeline [A18]); the simulator scales those.
         sin_m = np.sin(2 * np.pi * sim_month / 12)
         cos_m = np.cos(2 * np.pi * sim_month / 12)
-        model_feats = model_artifacts["features"]
-        best_name = model_artifacts["best_name"]
-        best_m = model_artifacts["results"][best_name]["model"]
+        # Use the saved, corrected Model A bundle ([A21]); fall back to the
+        # in-session fit only if Models/model_a.joblib is missing.
+        saved_a = load_saved_model_a()
+        if saved_a is not None:
+            model_feats, best_name = saved_a["features"], saved_a["best_name"]
+            best_m, sim_scaler, sim_period = saved_a["model"], saved_a["scaler"], saved_a["train_period"]
+        else:
+            model_feats = model_artifacts["features"]
+            best_name = model_artifacts["best_name"]
+            best_m = model_artifacts["results"][best_name]["model"]
+            sim_scaler, sim_period = model_artifacts["scaler"], "2016-2022"
 
         # Predict with simulated policy curb
         feat_dict = {
@@ -700,7 +716,7 @@ with tabs[5]:
         if best_name == "XGBoost":
             pred_log = float(best_m.predict(row_input)[0])
         else:
-            pred_log = float(best_m.predict(model_artifacts["scaler"].transform(row_input))[0])
+            pred_log = float(best_m.predict(sim_scaler.transform(row_input))[0])
         pred_rate = float(np.expm1(pred_log))
 
         # Predict baseline without policy curb
@@ -722,7 +738,7 @@ with tabs[5]:
         if best_name == "XGBoost":
             base_log = float(best_m.predict(row_base)[0])
         else:
-            base_log = float(best_m.predict(model_artifacts["scaler"].transform(row_base))[0])
+            base_log = float(best_m.predict(sim_scaler.transform(row_base))[0])
         base_rate = float(np.expm1(base_log))
 
         reg_pop = float(population[(population["Region"] == sim_region) & (population["Year"] == YEAR_MAX)]["Total_population"].values[0]) if not population[(population["Region"] == sim_region) & (population["Year"] == YEAR_MAX)].empty else 50000.0
@@ -733,25 +749,33 @@ with tabs[5]:
         st.markdown('<div class="kpi-label">Projected Monthly Assault Rate</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="kpi-value">{pred_rate:.1f} <span style="font-size:1.1rem;color:#718096;">per 100k</span></div>', unsafe_allow_html=True)
         st.markdown(f"**Expected Monthly Incidents**: ~{pred_incidents:,} assaults in {sim_region}")
-        if pac_curb < 0:
-            st.markdown(f"🎉 **Estimated Harm Reduction**: **~{prevented_incidents:,} fewer assault victims** per month from the policy intervention.")
+        if pac_curb != 0:
+            st.markdown(f"**Difference from the no-change scenario**: about **{-prevented_incidents:+,}** assaults per month "
+                        f"under the assumed factors. This is a sensitivity result, not an estimate of what a policy would achieve.")
         st.markdown('</div>', unsafe_allow_html=True)
         st.caption(
             "Illustrative scenario only. The 0.4 and 0.2 pass-through factors are assumptions, "
             "not estimates, and the model captures association rather than cause."
         )
+        with st.expander("Assumptions behind this scenario"):
+            st.markdown(f"""
+            - A change of **x%** in wholesale alcohol supply is **assumed** to change last month's alcohol-involved assaults by **0.4x%**
+              and domestic-violence assaults by **0.2x%**. These factors are chosen for illustration; the project did not estimate them.
+            - The model is the saved **{best_name}** from Model A (`Models/model_a.joblib`, trained {sim_period}).
+              The lag-1, lag-3 and lag-12 rates are all set to the value entered above.
+            - Alcohol supply was positively associated with assault rates but did **not** improve forecast accuracy (report, item 5.3),
+              so the output shows how sensitive the model is to the assumption, not the effect of a policy.
+            - No staffing or policy action should be taken from this scenario without validation with PFES.
+            """)
         st.write("")
 
-        # Actionable Recommendation
+        # Tier of the scenario rate (descriptive; no action is prescribed)
         if pred_rate >= rate_threshold:
-            st.markdown('<div class="alert-critical">🔴 <b>HIGH NEED TIER</b><br>'
-                        'Projected rate is above the planning threshold. Plan for additional frontline and crisis support capacity.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="alert-critical">🔴 <b>Scenario rate above the planning threshold</b></div>', unsafe_allow_html=True)
         elif pred_rate >= rate_threshold * 0.7:
-            st.markdown('<div class="alert-elevated">⚠️ <b>ELEVATED RISK TIER</b><br>'
-                        'Moderate increase projected. Consider targeted point-of-sale liquor compliance.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="alert-elevated">⚠️ <b>Scenario rate within 30% of the threshold</b></div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="alert-baseline">✅ <b>BASELINE OPERATIONAL TIER</b><br>'
-                        'Standard staffing allocation is sufficient.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="alert-baseline">✅ <b>Scenario rate below the planning threshold</b></div>', unsafe_allow_html=True)
 
 
 # =============================================================================

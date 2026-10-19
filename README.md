@@ -1,5 +1,7 @@
 # PRT661 Data Science Practice - Dan2 Theme 2
 
+[![Tests](https://github.com/HendrickDang/PRT661-DATA-SCIENCE-PRACTICE/actions/workflows/tests.yml/badge.svg)](https://github.com/HendrickDang/PRT661-DATA-SCIENCE-PRACTICE/actions/workflows/tests.yml)
+
 **Forecasting Assault Rates Across NT Regions to Support Public Safety Resource Planning**
 
 Charles Darwin University, Semester 2 2026. Unit coordinator Dr Reem Sherif, group lecturer Dr Thuseethan Selvarajah. Theme 2: Predictive Analytics and Forecasting. End user: NT Police, Fire and Emergency Services (PFES).
@@ -58,7 +60,7 @@ python Updated_End_to_End_pipeline.py
 
 Runs five stages in a single pass: ingest to `dataset/raw/`, panel build to `dataset/processed/`, EDA to `eda_plots/`, PCA, and the regression stage to `regression_plots/`.
 
-Ingest checks every source file before writing anything: required columns (spacing and case differences in headers are tolerated), numeric years, months 1-12, non-negative counts, alcohol and DV flags limited to `Yes` / `No` / `-`, and readable quarter dates. If any file fails, or is missing, the run stops with a `SCHEMA ERROR` or `SKIPPED` line and `dataset/raw/` keeps the last good copies. The checks are tested in `tests/test_ingest_schema.py` (`python -m unittest discover tests`).
+Ingest checks every source file before writing anything: required columns (spacing and case differences in headers are tolerated), numeric years, months 1-12, non-negative counts, alcohol and DV flags limited to `Yes` / `No` / `-`, and readable quarter dates. If any file fails, or is missing, the run stops with a `SCHEMA ERROR` or `SKIPPED` line and `dataset/raw/` keeps the last good copies. The checks are tested in `tests/test_ingest_schema.py` (`python -m unittest discover tests`). GitHub Actions runs the same tests, and loads all three dashboard pages, on every push to `main` and every pull request (`.github/workflows/tests.yml`).
 
 The regression stage also writes its tables to `Outputs/` (`R1_feature_variants_cv.csv`, `R4_model_a_metrics.csv`, `R9_per_region_accuracy.csv`, `R10_model_b_metrics.csv`) so reports and slides quote files instead of console output.
 
@@ -160,7 +162,7 @@ The app opens at http://localhost:8501 with two roles:
 
 Shared loading and model training live in `core_data.py` (cached). Do **not** run files under `pages/` with `python` directly — Streamlit must start from `app.py` at the repo root so imports resolve.
 
-The forecast tab and the Workbench's backtest tab read `Outputs/` (F1, E4-E6, M1-M3) and refit nothing, so they always show the figures in the report. The Model A/B tabs still retrain the suite from the processed panel for interactive inspection, with the same features and tuning rules as the pipeline. The policy scenario simulator is illustrative: its pass-through factors are assumptions, not estimates. Priority tiers use neutral wording (High need, Elevated, Baseline): they describe a need for services, not a judgement about a community.
+The forecast tab and the Workbench's backtest tab read `Outputs/` (F1, E4-E6, M1-M3) and refit nothing, so they always show the figures in the report. The policy scenario uses the saved `Models/model_a.joblib`, and the Workbench lists every saved model bundle. In response to the Assessment 3 feedback, the staffing matrix and seasonal tab describe recorded demand instead of prescribing deployments, and the scenario shows its assumed 0.4 and 0.2 pass-through factors as assumptions. The Model A/B tabs still retrain the suite from the processed panel for interactive inspection, with the same features and tuning rules as the pipeline. The policy scenario simulator is illustrative: its pass-through factors are assumptions, not estimates. Priority tiers use neutral wording (High need, Elevated, Baseline): they describe a need for services, not a judgement about a community.
 
 ### Hosted version (Streamlit Community Cloud)
 

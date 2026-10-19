@@ -33,6 +33,7 @@ from core_data import (
     load_data,
     load_forecast_outputs,
     run_model_training,
+    saved_model_inventory,
 )
 
 st.set_page_config(
@@ -92,7 +93,7 @@ st.sidebar.markdown("**Cross-Validation Protocol:**")
 st.sidebar.info("TimeSeriesSplit (k=5 folds) over calendar dates. StandardScaler refitted within each training fold to prevent distribution leakage [A15].")
 
 st.sidebar.markdown("**Historical Partitions [A11]:**")
-st.sidebar.markdown(f"- **Train Period**: {YEAR_MIN} – 2022 (`n={len(train)}` region-month rows)")
+st.sidebar.markdown(f"- **Train Period**: Jan 2016 – Dec 2022 (`n={len(train)}` region-month rows; 2015 is lag history only)")
 st.sidebar.markdown(f"- **Test Period**: 2023 – {YEAR_MAX} (`n={len(test)}` region-month rows)")
 st.sidebar.markdown(f"- **Provisional Rows Flagged**: {reg_panel['is_provisional'].sum()} rows ([A9])")
 
@@ -176,7 +177,7 @@ digraph pipeline {
         {"Code": "[A8]", "Name": "Offence Flag Accounting", "Description": "Alcohol and DV involvement counted in Number of Offences, not matching raw rows (schema changes split categories into more rows)."},
         {"Code": "[A9]", "Name": "Provisional Data", "Description": "Most recent 6 months flagged as provisional due to late-reporting lag."},
         {"Code": "[A10]", "Name": "Complete Calendar Grid", "Description": "Constructs complete Region x Month Cartesian grid so lag1, lag3, lag12 represent true calendar intervals across the Nov 2023 gap."},
-        {"Code": "[A11]", "Name": "Model A Protocol", "Description": "Calendar + lag models without PAC; trained 2015–2022, tested 2023–2025."},
+        {"Code": "[A11]", "Name": "Model A Protocol", "Description": "Calendar + lag models without PAC; trained Jan 2016 to Dec 2022 (2015 supplies lag history only), tested 2023–2025."},
         {"Code": "[A12]", "Name": "Model B Protocol", "Description": "Evaluates marginal impact of PAC; trained 2023–2024, tested 2025. Different train window from Model A, hence errors are not directly comparable."},
         {"Code": "[A13]", "Name": "Calendar-Sorted CV", "Description": "TimeSeriesSplit applied over date-sorted rows to prevent training on one region and testing on another."},
         {"Code": "[A14]", "Name": "PCA on Age Shares", "Description": "PCA uses age-group shares (percentages), not counts, preventing regional population size from dominating PC1 at >99%."},
@@ -513,7 +514,7 @@ with ds_tabs[7]:
 
     plot_category = st.radio("Figure Directory:", ["Exploratory Data Analysis (`eda_plots/`)", "Regression Diagnostics (`regression_plots/`)"], horizontal=True)
 
-    target_dirs = EDA_PLOT_DIRS if "EDA" in plot_category else REG_PLOT_DIRS
+    target_dirs = EDA_PLOT_DIRS if "eda_plots" in plot_category else REG_PLOT_DIRS
     found_pngs = []
     for d in target_dirs:
         if d.exists():
@@ -541,6 +542,16 @@ with ds_tabs[8]:
         "per horizon, and every month from June 2021 to June 2025 is scored."
     )
     fo = load_forecast_outputs()
+
+    st.markdown("##### Saved model artefacts used by the dashboard ([A21])")
+    inv = saved_model_inventory()
+    if inv.empty:
+        st.info("No saved models found. Run the pipeline and `python forecast.py`.")
+    else:
+        st.dataframe(inv, hide_index=True, use_container_width=True)
+        st.caption("The forecast tab shows the outputs of the forecast_h* bundles; the policy scenario in the "
+                   "Administrator Portal uses model_a.joblib. Both were saved with the corrected, lagged features.")
+
     bt = fo["backtest"]
     if bt is None:
         st.info("Backtest results not found. Run `python evaluation.py`.")

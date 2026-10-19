@@ -1,0 +1,41 @@
+# Runs the ingest schema tests and checks that every dashboard page loads,
+# on each push to main and on each pull request.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python 3.11 is the reference environment (README, "Reference environment").
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install the pinned environment
+        run: pip install -r requirements.txt
+
+      - name: Ingest schema tests
+        run: python -m unittest discover tests -v
+
+      - name: Dashboard pages load without errors
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'EOF'
+          from streamlit.testing.v1 import AppTest
+
+          for page in ["app.py", "pages/1_Administrator_Portal.py", "pages/2_Data_Science_Workbench.py"]:
+              at = AppTest.from_file(page, default_timeout=300).run()
+              assert not at.exception, f"{page}: {at.exception[0].value}"
+              print(f"{page}: loaded")
+          EOF

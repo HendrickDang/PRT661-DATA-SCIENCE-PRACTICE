@@ -440,3 +440,54 @@ def latest_population(monthly_assault: pd.DataFrame) -> pd.Series:
     last_year = int(monthly_assault["Year"].max())
     return (monthly_assault[monthly_assault["Year"] == last_year]
             .groupby("Region")["Total_population"].first())
+
+
+# -----------------------------------------------------------------------------
+# Saved Model A bundle (written by the pipeline, [A21])
+# -----------------------------------------------------------------------------
+MODELS_DIR = BASE_DIR / "Models"
+
+
+@st.cache_resource(show_spinner="Loading saved model artefacts...")
+def load_saved_model_a() -> dict | None:
+    """Model A exactly as saved by Updated_End_to_End_pipeline.py, so the
+    dashboard uses the corrected, versioned artefact instead of a refit.
+    The best model is the one flagged in Outputs/R4_model_a_metrics.csv."""
+    path = MODELS_DIR / "model_a.joblib"
+    if not path.exists():
+        return None
+    import joblib
+    bundle = joblib.load(path)
+    best = "XGBoost"
+    r4 = OUTPUTS_DIR / "R4_model_a_metrics.csv"
+    if r4.exists():
+        metrics = pd.read_csv(r4)
+        flagged = metrics.loc[metrics["Best"].astype(str) == "True", "Model"]
+        if not flagged.empty and flagged.iloc[0] in bundle["models"]:
+            best = flagged.iloc[0]
+    return {
+        "features": list(bundle["features"]),
+        "best_name": best,
+        "model": bundle["models"][best],
+        "scaler": bundle["scaler_for_linear_models"],
+        "train_period": bundle.get("train_period", "2016-2022"),
+        "versions": bundle.get("versions", {}),
+    }
+
+
+def saved_model_inventory() -> pd.DataFrame:
+    """One row per saved model bundle in Models/, for the Workbench."""
+    import joblib
+    rows = []
+    for path in sorted(MODELS_DIR.glob("*.joblib")):
+        b = joblib.load(path)
+        rows.append({
+            "File": f"Models/{path.name}",
+            "Horizon (months)": str(b.get("horizon_months", "single split")),
+            "Models": ", ".join(b.get("models", {}).keys()),
+            "Features": len(b.get("features", [])),
+            "Trained on": b.get("trained_on_target_months", b.get("train_period", "")),
+            "Rows": str(b.get("train_rows", "")),
+            "scikit-learn / XGBoost": f"{b.get('versions', {}).get('scikit_learn', '')} / {b.get('versions', {}).get('xgboost', '')}",
+        })
+    return pd.DataFrame(rows)
