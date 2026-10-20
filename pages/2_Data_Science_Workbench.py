@@ -302,20 +302,28 @@ with ds_tabs[3]:
     st.subheader("🧪 Leakage-Free Feature Selection & Multicollinearity Diagnostics [A16]")
     st.markdown(
         "In accordance with **[A16]**, feature variants were benchmarked strictly on the training partition "
-        "(2015–2022) using 5-fold TimeSeriesSplit CV. The test partition (2023–2025) was withheld completely from model selection."
+        "(Jan 2016 – Dec 2022; 2015 supplies lag history only) using 5-fold TimeSeriesSplit CV. "
+        "The test partition (2023–2025) was withheld completely from model selection."
     )
 
     f_col1, f_col2 = st.columns(2)
     with f_col1:
         st.markdown("##### R1: Feature Variant Comparison (TimeSeriesSplit CV)")
         v_rmse = model_artifacts["variant_rmse"]
+        best_variant = model_artifacts["best_variant"]
+        var_df = pd.DataFrame({
+            "Variant": list(v_rmse.keys()),
+            "CV RMSE": list(v_rmse.values()),
+        })
+        var_df["Highlight"] = np.where(var_df["Variant"] == best_variant, "Winner", "Other")
         fig_var = px.bar(
-            x=list(v_rmse.keys()),
-            y=list(v_rmse.values()),
-            color=list(v_rmse.keys()),
-            color_discrete_sequence=["#90caf9", "#90caf9", "#90caf9", "#e53e3e"],
+            var_df,
+            x="Variant",
+            y="CV RMSE",
+            color="Highlight",
+            color_discrete_map={"Winner": "#e53e3e", "Other": "#90caf9"},
             title="Feature Variant CV RMSE (Lower is Better | Red = Winner)",
-            labels={"x": "Feature Variant", "y": "CV RMSE (log scale)"}
+            labels={"Variant": "Feature Variant", "CV RMSE": "CV RMSE (log scale)"},
         )
         fig_var.update_layout(showlegend=False, height=350)
         st.plotly_chart(fig_var, use_container_width=True)

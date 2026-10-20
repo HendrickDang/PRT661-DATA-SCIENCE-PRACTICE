@@ -15,7 +15,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core_data import (
-    ASSAULT_CATEGORY,
     KEY_TOWNS,
     MONTH_LABELS,
     REGION_COLORS,
@@ -110,10 +109,9 @@ st.markdown("""
 st.markdown('<div class="admin-header">🏛️ Northern Territory Justice & Public Safety Resource Portal</div>', unsafe_allow_html=True)
 st.markdown('<div class="admin-sub">Executive Decision Support for Frontline Policing, Health Services, and Policy Planning</div>', unsafe_allow_html=True)
 
-# Load data
+# Load data. Forecasts come from Outputs/; Model A is loaded in Tab 6 from
+# Models/model_a.joblib. Do not refit on page load.
 panel, population, monthly_assault = load_data()
-reg_panel, train, test, dummy_cols, cv_frame = get_regression_panel(monthly_assault, population)
-model_artifacts = run_model_training(train, test, cv_frame, dummy_cols)
 
 # -----------------------------------------------------------------------------
 # Sidebar Controls
@@ -164,7 +162,7 @@ tabs = st.tabs([
     "📈 Forecasts & Planning Ranges",
     "🗺️ Crime Map & Spatial Resource Demand",
     "🚨 Resource Priority & Staffing Matrix",
-    "📅 Seasonal Surge Calendar",
+    "📅 Seasonal Demand Calendar",
     "🎯 Policy Intervention Simulator",
     "📥 Briefing Note Export"
 ])
@@ -180,7 +178,6 @@ with tabs[0]:
     avg_assault_rate = filtered_assault["Assault_rate_100k"].mean()
     alc_assault_share = (filtered_assault["Alcohol_offences"].sum() / total_assaults * 100) if total_assaults > 0 else 0
     dv_assault_share = (filtered_assault["DV_offences"].sum() / total_assaults * 100) if total_assaults > 0 else 0
-    latest_pop = population[population["Year"] == year_range[1]]["Total_population"].sum()
 
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
@@ -201,9 +198,9 @@ with tabs[0]:
     with c_left:
         st.markdown("#### 📌 Key Findings")
         st.markdown(f"""
-        - **Assault is the #1 Crime Challenge**: Violent crime accounts for the largest demand on Northern Territory Police and hospital emergency departments.
+        - **Assault is the second most recorded offence**: across 2015-2025 only theft was recorded more often, and assault is the offence this system forecasts.
         - **High Alcohol & Domestic Violence Nexus**: **{alc_assault_share:.1f}%** of all recorded assaults are alcohol-involved, and **{dv_assault_share:.1f}%** involve domestic or family violence. Wholesale alcohol supply is positively associated with assault rates, but it did not improve the forecasts and its causal effect is not established (report, item 5.3).
-        - **Per-Capita Disparity**: Greater Darwin generates the largest absolute headcount of incidents due to its population size (over 60% of NT residents), but remote regional jurisdictions (such as Central Australia and Barkly) suffer from significantly higher per-capita assault rates.
+        - **Per-Capita Disparity**: Greater Darwin generates the largest absolute headcount of incidents due to its population size (about 60% of NT residents), but remote regional jurisdictions (such as Central Australia and Barkly) suffer from significantly higher per-capita assault rates.
         """)
 
     with c_right:
@@ -376,8 +373,8 @@ with tabs[2]:
     st.subheader("🗺️ Northern Territory Spatial Crime Distribution")
     st.markdown(
         "Visualise crime density across the Territory. "
-        "Toggle between **Per-Capita Victimisation Rate** (which region needs services most urgently) "
-        "and **Total Incident Headcount** (where the raw volume of police officers is deployed)."
+        "Toggle between **Per-Capita Assault Rate** (how common assault is relative to population) "
+        "and **Total Incident Headcount** (where the most incidents are recorded)."
     )
 
     m_col1, m_col2 = st.columns([1, 3])
@@ -496,8 +493,8 @@ with tabs[2]:
     st.markdown("---")
     st.markdown("#### ⚖️ The Resource Planning Discrepancy: Volume vs Per-Capita Burden")
     st.markdown(
-        "**Crucial for Cabinet & Budget Allocation**: Allocating staff purely by raw headcount over-allocates to Greater Darwin "
-        "while under-funding Central Australia and Barkly where per-capita violence is much higher."
+        "**Volume and rate tell different stories**: Greater Darwin records the most assaults because it has the most "
+        "residents, while Central Australia and Barkly have much higher rates per 100,000."
     )
 
     c_bar1, c_bar2 = st.columns(2)
@@ -583,14 +580,13 @@ with tabs[3]:
 
 
 # =============================================================================
-# TAB 5: Seasonal Surge Calendar
+# TAB 5: Seasonal Demand Calendar
 # =============================================================================
 with tabs[4]:
-    st.subheader("📅 Northern Territory Seasonal Surge Calendar")
+    st.subheader("📅 Northern Territory Seasonal Demand Calendar")
     st.markdown(
-        "Crime in the Northern Territory follows a pronounced seasonal rhythm. "
-        "The **Wet Season (November to April)** historically brings elevated assault volume due to temperature, "
-        "holiday periods, and community mobility patterns."
+        "Recorded assaults vary across the year. The chart compares the **wet season (November to April)** "
+        "with the **dry season (May to October)**; it describes the pattern and does not explain its causes."
     )
 
     s_col1, s_col2 = st.columns(2)
@@ -598,14 +594,14 @@ with tabs[4]:
         # Monthly Seasonality
         monthly_season = filtered_assault.groupby("Month number", as_index=False)["Assault_offences"].sum()
         monthly_season["Month"] = monthly_season["Month number"].map(lambda m: MONTH_LABELS[m - 1])
-        monthly_season["Season"] = monthly_season["Month number"].apply(lambda m: "Wet Season (Surge)" if m in [11, 12, 1, 2, 3, 4] else "Dry Season")
+        monthly_season["Season"] = monthly_season["Month number"].apply(lambda m: "Wet Season" if m in [11, 12, 1, 2, 3, 4] else "Dry Season")
 
         fig_season = px.bar(
             monthly_season,
             x="Month",
             y="Assault_offences",
             color="Season",
-            color_discrete_map={"Wet Season (Surge)": "#EF5350", "Dry Season": "#42A5F5"},
+            color_discrete_map={"Wet Season": "#EF5350", "Dry Season": "#42A5F5"},
             title="Total Assault Volume by Month (Wet vs Dry Season)",
             labels={"Assault_offences": "Total Assaults"}
         )
@@ -650,18 +646,20 @@ with tabs[4]:
 with tabs[5]:
     st.subheader("🎯 Policy Intervention & Scenario Simulator")
     st.markdown(
-        "Test real-world policy levers: **Simulate the expected impact of wholesale alcohol supply restrictions "
-        "(e.g., takeaway curbs, BDR enforcement) on projected assault rates and frontline alerts.**"
+        "Explore an **illustrative sensitivity scenario**: how the model's projection changes when wholesale "
+        "alcohol supply is assumed to change. It does not estimate the effect of any real policy."
     )
 
     sim_col1, sim_col2 = st.columns([1, 1])
     with sim_col1:
         st.markdown("##### 1. Jurisdiction & Environmental Context")
         sim_region = st.selectbox("Target Jurisdiction:", options=REGION_ORDER, index=0)
-        sim_month = st.slider("Target Forecast Month:", min_value=1, max_value=12, value=12,
-                              format="%d - " + MONTH_LABELS[11])
+        sim_month = st.slider("Target Forecast Month:", min_value=1, max_value=12, value=12)
         is_wet = 1 if sim_month in [11, 12, 1, 2, 3, 4] else 0
-        st.caption(f"Climate Period: **{'Wet Season (Monsoonal Peak)' if is_wet else 'Dry Season'}**")
+        st.caption(
+            f"Month: **{MONTH_LABELS[sim_month - 1]}** · "
+            f"Climate Period: **{'Wet Season (Monsoonal Peak)' if is_wet else 'Dry Season'}**"
+        )
 
         reg_defaults = monthly_assault[monthly_assault["Region"] == sim_region]
         def_lag1 = float(reg_defaults["Assault_rate_100k"].tail(6).mean()) if not reg_defaults.empty else 250.0
@@ -692,10 +690,13 @@ with tabs[5]:
             model_feats, best_name = saved_a["features"], saved_a["best_name"]
             best_m, sim_scaler, sim_period = saved_a["model"], saved_a["scaler"], saved_a["train_period"]
         else:
-            model_feats = model_artifacts["features"]
-            best_name = model_artifacts["best_name"]
-            best_m = model_artifacts["results"][best_name]["model"]
-            sim_scaler, sim_period = model_artifacts["scaler"], "2016-2022"
+            # Fallback only when the saved bundle is missing.
+            _, train, test, dummy_cols, cv_frame = get_regression_panel(monthly_assault, population)
+            artifacts = run_model_training(train, test, cv_frame, dummy_cols)
+            model_feats = artifacts["features"]
+            best_name = artifacts["best_name"]
+            best_m = artifacts["results"][best_name]["model"]
+            sim_scaler, sim_period = artifacts["scaler"], "2016-2022"
 
         # Predict with simulated policy curb
         feat_dict = {
