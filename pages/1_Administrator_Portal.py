@@ -254,18 +254,20 @@ with tabs[1]:
                 f'({mon["counts"]["PASS"]} pass, {mon["counts"]["WARN"]} warning, '
                 f'{mon["counts"]["FAIL"]} fail). Crime data as at {mon["crime_data_as_at"]}, '
                 f'checked {mon["check_date"]}.<br>{status["verdict"]}<br>'
-                f'<i>Data vintage: this prototype is frozen at the crime release as at '
-                f'{mon["crime_data_as_at"]} for reproducibility. A newer release must pass the same '
-                f'checks before its forecasts replace these.</i></div>',
+                f'<i>Historical snapshot: crime data as at {mon["crime_data_as_at"]}, checked '
+                f'{mon["check_date"]}. Frozen for reproducibility; these are not current operational '
+                f'forecasts, and a newer release must pass the same checks before it replaces them.</i></div>',
                 unsafe_allow_html=True)
         else:
             st.caption("Release checks have not been run yet (`python monitoring.py`).")
 
         st.markdown(
             f"Forecasts made at the end of **{origin:%B %Y}** for each region. Each horizon uses the "
-            f"method with the lowest error in the rolling-origin backtest: "
+            f"method with the lowest error in the rolling-origin backtest that also beat last year's "
+            f"figure after the model set-up was fixed: "
             + "; ".join(f"**{h} month{'s' if h > 1 else ''}**: {m}" for h, m in method_by_h.items())
-            + ". The range is an 80% planning range: about four months in five should fall inside it."
+            + ". The range is an 80% planning range: in testing it held about three to four months in "
+            "five (75-80%), slightly fewer than its nominal level."
         )
 
         pop = latest_population(monthly_assault)

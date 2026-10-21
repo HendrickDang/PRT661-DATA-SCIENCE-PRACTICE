@@ -5,7 +5,7 @@ forecast.py - Forecasts, saved forecast models and a first check on new data
 Run order:
     python Updated_End_to_End_pipeline.py     # panel, Model A, Outputs/R*
     python evaluation.py                      # backtest, Outputs/E2-E5
-    python forecast.py                        # this file, Outputs/F1, E6
+    python forecast.py                        # this file: candidate Outputs/staging/F1, E6
 
 What it adds
 ------------

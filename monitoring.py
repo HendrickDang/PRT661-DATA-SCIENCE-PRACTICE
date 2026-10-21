@@ -5,8 +5,8 @@ monitoring.py - Release checks for the NT assault forecasting system
 Run order:
     python Updated_End_to_End_pipeline.py     # panel, Model A, Outputs/R*
     python evaluation.py                      # backtest, Outputs/E2-E5
-    python forecast.py                        # forecasts, Outputs/F1, E6
-    python monitoring.py                      # this file, Outputs/M1-M3
+    python forecast.py                        # candidate Outputs/staging/F1, E6
+    python monitoring.py                      # this file, Outputs/M1-M3; publishes F1
 
 This script implements the team's monitoring design
 (documents/Monitoring_Design_DAN2_Theme2.docx). It is run after each new NT

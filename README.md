@@ -31,12 +31,27 @@ Regions covered: Barkly, Big Rivers, Central Australia, East Arnhem, Greater Dar
 | --- | --- | --- |
 | `Updated_End_to_End_pipeline.py` | **Final code to run** | Full pipeline: ingest, panel build, EDA, PCA and regression. Produces the figures in Sections 4.1-4.5 of the report. |
 | `evaluation.py` | **Final** | Standalone forecast evaluation and benchmarking. Produces Section 4.6. Runs independently of the pipeline. |
-| `forecast.py` | **Final (Assessment 4)** | Forecasts for the next 1, 3, 6 and 12 months with 80% intervals, one saved model bundle per horizon, and a first out-of-sample check on January to April 2026. Run after `evaluation.py`. |
-| `monitoring.py` | **Final (Assessment 4)** | Release checks from the monitoring design: data quality, forecast accuracy and drift, each PASS, WARN or FAIL, plus the decisions to promote the forecasts and whether to retrain. Run after `forecast.py`. |
+| `forecast.py` | **Final (Assessment 4)** | Candidate forecasts for the next 1, 3, 6 and 12 months with 80% intervals (written to `Outputs/staging/`), one saved model bundle per horizon, and a first out-of-sample check on January to April 2026. Run after `evaluation.py`. |
+| `monitoring.py` | **Final (Assessment 4)** | Release checks from the monitoring design: data quality, forecast accuracy and drift, each PASS, WARN or FAIL, plus the decisions to promote the forecasts and whether to retrain. Publishes the staged candidate to `Outputs/F1_forecasts.csv` only if the checks pass (`release_gate.py`). Run after `forecast.py`. |
 | `app.py` (+ `pages/`, `core_data.py`) | **Final** | Streamlit dual-role dashboard for PFES-facing briefing and technical model review. Shows the forecasts with 80% ranges and the latest release check. Requires the processed panel from the pipeline. |
 | `run_dashboard.bat` | Helper (Windows) | Launches `streamlit run app.py` using a local Anaconda install when available. |
 | `End to End pipeline.py` | Superseded | The original pipeline. Retained for contribution history. It contains three data leakage issues corrected in the file above, and does not run on Python 3.8. |
 | `End to End pipeline_Will fix.py` | Superseded | Earlier debugging copy. Not part of the current workflow. |
+
+### Run order
+
+```bash
+python Updated_End_to_End_pipeline.py   # 1. ingest, panel, EDA, PCA, regression  -> dataset/, Outputs/R*, Models/model_a.joblib
+python evaluation.py                    # 2. backtest E4, post-selection check E11, deployment rule E12, intervals E5
+python forecast.py                      # 3. CANDIDATE forecasts -> Outputs/staging/F1_forecasts.csv, Models/forecast_h*.joblib, E6
+python monitoring.py                    # 4. release checks M1-M3; the gate publishes the candidate to Outputs/F1_forecasts.csv only if they pass
+streamlit run app.py                    # 5. dashboard: reads the APPROVED Outputs/F1_forecasts.csv, never the staged candidate
+python -m unittest discover tests       # 40 tests: 17 ingest schema + 23 release gate / deployment rule
+```
+
+**Evaluation in one paragraph.** E4 scores every method on a rolling-origin backtest (targets June 2021 to June 2025). Because the feature set and tuning were chosen on 2016-2022, E11 re-scores only origins from December 2022 as a robustness check. E12 deploys a method only if it leads E4 and also beats last year's figure on the E11 origins: XGBoost at 1 month, the 12-month moving average at 3 and 6 months, last year's figure at 12. E11 informs that rule, so it is not an untouched test; the January to April 2026 months (E6) are. XGBoost's one-month lead over the moving average is small and not statistically established, and the 80% intervals cover 75-80% of outcomes, slightly below their nominal level.
+
+**Data vintage.** All committed results are a frozen, reproducible snapshot: crime data As At 1 June 2026, release check run on 18 October 2026. They are historical prototype outputs, not current operational forecasts.
 
 ## Requirements
 

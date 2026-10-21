@@ -152,7 +152,8 @@ class DashboardStatusTest(GateFixture):
         release = release_gate.publish(promote=True, out_dir=self.out)
         status = release_gate.dashboard_status(self.summary(True, release))
         self.assertTrue(status["cleared"])
-        self.assertIn("Cleared for planning use", status["verdict"])
+        self.assertIn("Internal release checks passed", status["verdict"])
+        self.assertIn("prototype demonstration only", status["verdict"])
 
     def test_checks_pass_but_invalid_candidate_is_not_cleared(self):
         """Monitoring allows promotion, the gate rejects a malformed file:
@@ -163,7 +164,7 @@ class DashboardStatusTest(GateFixture):
         status = release_gate.dashboard_status(self.summary(True, release))
         self.assertFalse(status["cleared"])
         self.assertEqual(status["level"], "FAIL")
-        self.assertNotIn("Cleared", status["verdict"])
+        self.assertNotIn("checks passed and these forecasts were published", status["verdict"])
         self.assertIn("last approved", status["verdict"])
         self.assertEqual((self.out / "F1_forecasts.csv").read_bytes(), self.approved_bytes)
 

@@ -156,8 +156,9 @@ def dashboard_status(summary: dict | None) -> dict:
     The source of truth is the release record (forecast_release), not the
     preliminary promotion flag: the checks can allow promotion while the gate
     still rejects an invalid candidate. Returns level (PASS / WARN / FAIL for
-    the banner colour), cleared (may the shown forecasts be used for
-    planning) and a plain-language verdict.
+    the banner colour), cleared (did the shown forecasts pass the internal
+    checks and get published; this is not operational approval, which needs
+    PFES and community review) and a plain-language verdict.
     """
     if not summary:
         return {"level": "WARN", "cleared": False,
@@ -168,7 +169,9 @@ def dashboard_status(summary: dict | None) -> dict:
     if action == "published":
         level = summary.get("overall_status", "PASS")
         return {"level": "WARN" if level == "FAIL" else level, "cleared": True,
-                "verdict": "Cleared for planning use; warnings are reviewed at the next release."}
+                "verdict": ("Internal release checks passed and these forecasts were published. This is a "
+                            "prototype demonstration only: it has not been approved for operational PFES use. "
+                            "Warnings are reviewed at the next release.")}
     if action == "rejected" and summary.get("promote_forecasts_to_dashboard"):
         return {"level": "FAIL", "cleared": False,
                 "verdict": ("The release checks passed, but the new forecast file failed its integrity "
@@ -180,8 +183,8 @@ def dashboard_status(summary: dict | None) -> dict:
                             f"below are the last approved forecasts (origin {origin}).")}
     if action == "none" and summary.get("promote_forecasts_to_dashboard"):
         return {"level": summary.get("overall_status", "PASS"), "cleared": True,
-                "verdict": (f"No new forecast was waiting for release; the approved forecasts "
-                            f"(origin {origin}) passed the latest checks.")}
+                "verdict": (f"No new forecast was waiting for release; the published forecasts "
+                            f"(origin {origin}) passed the latest internal checks. Prototype demonstration only.")}
     if summary.get("promote_forecasts_to_dashboard") and not release:
         # record written before the release gate existed
         return {"level": summary.get("overall_status", "WARN"), "cleared": False,
