@@ -591,13 +591,14 @@ with ds_tabs[8]:
             st.dataframe(post.sort_values("h = 1").style.format("{:.1f}").highlight_min(axis=0, color="#c6f6d5"),
                          use_container_width=True)
             st.caption("The feature set, alphas and XGBoost settings were chosen on 2016-2022 cross-validation, "
-                       "but the backtest starts in 2021, so this table re-scores only origins after the selection "
+                       "but the backtest starts in 2021, so this robustness check re-scores only origins after the selection "
                        "window. Deployment rule (E12): a method is used only if it has the lowest error over the "
                        "full backtest and also beats last year's figure on these origins. At 12 months Lasso leads "
                        "here but trails over the full backtest, and its lead over last year's figure is not "
                        "established (ahead in 71% of bootstrap resamples, 95% interval includes zero), so the "
                        "seasonal naive value is kept. XGBoost's one-month lead over the moving average is likewise "
-                       "small and not established.")
+                       "small and not established. Because this check also informs the rule, it is not an untouched test of it; "
+                       "the January-April 2026 months below are the only untouched data.")
 
         c_left, c_right = st.columns(2)
         with c_left:
