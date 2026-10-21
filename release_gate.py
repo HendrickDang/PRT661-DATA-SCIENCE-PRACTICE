@@ -14,13 +14,20 @@ the release checks and then calls publish(), which
       in staging for investigation.
 
 Integrity checks on the candidate (a candidate that fails is never published,
-whatever the release checks say):
+whatever the release checks say). The expected set is fixed here, not read
+from the candidate, so a file missing a whole region or horizon is caught:
     - the expected columns are present;
-    - one recommended forecast per region and horizon, for every region;
     - a single forecast origin;
+    - exactly the six NT regions and the horizons 1, 3, 6 and 12 months;
+    - exactly one recommended forecast for every region-horizon pair;
+    - each target month is the origin plus the horizon;
     - forecasts are finite and not negative;
     - each recommended forecast has an 80% range with
       Lower_80 <= forecast <= Upper_80.
+
+dashboard_status() turns the release record into the message the
+Administrator Portal shows, so the page reports what was actually published,
+not only what the checks allowed.
 
 The decision is returned as a dictionary that monitoring.py writes into
 Outputs/M3_monitoring_summary.json. tests/test_release_gate.py forces a FAIL
@@ -39,6 +46,9 @@ import pandas as pd
 
 APPROVED_NAME = "F1_forecasts.csv"
 STAGING_DIRNAME = "staging"
+EXPECTED_REGIONS = ("Barkly", "Big Rivers", "Central Australia", "East Arnhem",
+                    "Greater Darwin", "Top End")
+EXPECTED_HORIZONS = (1, 3, 6, 12)
 REQUIRED_COLUMNS = ["Origin", "Horizon_months", "Target_month", "Region", "Model",
                     "Recommended", "Forecast_rate_100k", "Lower_80", "Upper_80"]
 
@@ -62,16 +72,35 @@ def candidate_problems(path: Path) -> list[str]:
     problems = []
     if df["Origin"].nunique() != 1:
         problems.append("more than one forecast origin")
+    regions, horizons = set(df["Region"]), set(pd.to_numeric(df["Horizon_months"], errors="coerce"))
+    if regions != set(EXPECTED_REGIONS):
+        missing_r = sorted(set(EXPECTED_REGIONS) - regions)
+        extra_r = sorted(map(str, regions - set(EXPECTED_REGIONS)))
+        problems.append("regions do not match the six NT regions"
+                        + (f" (missing: {', '.join(missing_r)})" if missing_r else "")
+                        + (f" (unexpected: {', '.join(extra_r)})" if extra_r else ""))
+    if horizons != set(EXPECTED_HORIZONS):
+        problems.append(f"horizons must be exactly {', '.join(map(str, EXPECTED_HORIZONS))} months")
+
     rec = df[df["Recommended"].astype(str) == "True"]
     if rec.empty:
         return problems + ["no recommended forecasts"]
     per_cell = rec.groupby(["Region", "Horizon_months"]).size()
+    expected_cells = pd.MultiIndex.from_product([EXPECTED_REGIONS, EXPECTED_HORIZONS],
+                                                names=["Region", "Horizon_months"])
+    per_cell = per_cell.reindex(expected_cells, fill_value=0)
     if (per_cell != 1).any():
-        problems.append("not exactly one recommended forecast per region and horizon")
-    regions = set(df["Region"])
-    for h, grp in rec.groupby("Horizon_months"):
-        if set(grp["Region"]) != regions:
-            problems.append(f"h = {h}: recommended forecast missing for some regions")
+        problems.append("not exactly one recommended forecast for every region and horizon")
+
+    if df["Origin"].nunique() == 1:
+        try:
+            origin = pd.Period(str(df["Origin"].iloc[0]), freq="M")
+            expect = df["Horizon_months"].astype(int).map(lambda h: str(origin + int(h)))
+            if (df["Target_month"].astype(str) != expect).any():
+                problems.append("target months do not equal origin plus horizon")
+        except (ValueError, TypeError):
+            problems.append("origin or target month is not a valid YYYY-MM month")
+
     values = pd.to_numeric(df["Forecast_rate_100k"], errors="coerce")
     if not np.isfinite(values).all() or (values < 0).any():
         problems.append("forecasts must be finite and not negative")
@@ -119,3 +148,43 @@ def publish(promote: bool, out_dir: Path) -> dict:
     if approved.exists():
         result["approved_origin"] = str(pd.read_csv(approved, usecols=["Origin"])["Origin"].iloc[0])
     return result
+
+
+def dashboard_status(summary: dict | None) -> dict:
+    """What the Administrator Portal should say about the forecasts it shows.
+
+    The source of truth is the release record (forecast_release), not the
+    preliminary promotion flag: the checks can allow promotion while the gate
+    still rejects an invalid candidate. Returns level (PASS / WARN / FAIL for
+    the banner colour), cleared (may the shown forecasts be used for
+    planning) and a plain-language verdict.
+    """
+    if not summary:
+        return {"level": "WARN", "cleared": False,
+                "verdict": "Release checks have not been run yet (python monitoring.py)."}
+    release = summary.get("forecast_release") or {}
+    origin = release.get("approved_origin", "unknown")
+    action = release.get("action")
+    if action == "published":
+        level = summary.get("overall_status", "PASS")
+        return {"level": "WARN" if level == "FAIL" else level, "cleared": True,
+                "verdict": "Cleared for planning use; warnings are reviewed at the next release."}
+    if action == "rejected" and summary.get("promote_forecasts_to_dashboard"):
+        return {"level": "FAIL", "cleared": False,
+                "verdict": ("The release checks passed, but the new forecast file failed its integrity "
+                            "checks and was not published. The ranges below are the last approved "
+                            f"forecasts (origin {origin}); do not treat them as an update.")}
+    if action == "rejected":
+        return {"level": "FAIL", "cleared": False,
+                "verdict": ("A release check failed, so the new forecasts were not published. The ranges "
+                            f"below are the last approved forecasts (origin {origin}).")}
+    if action == "none" and summary.get("promote_forecasts_to_dashboard"):
+        return {"level": summary.get("overall_status", "PASS"), "cleared": True,
+                "verdict": (f"No new forecast was waiting for release; the approved forecasts "
+                            f"(origin {origin}) passed the latest checks.")}
+    if summary.get("promote_forecasts_to_dashboard") and not release:
+        # record written before the release gate existed
+        return {"level": summary.get("overall_status", "WARN"), "cleared": False,
+                "verdict": "The checks allowed promotion, but no publication record exists; re-run monitoring.py."}
+    return {"level": "FAIL", "cleared": False,
+            "verdict": "A release check failed: do not use these forecasts in briefings until reviewed."}

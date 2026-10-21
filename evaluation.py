@@ -29,6 +29,13 @@ pieces the main pipeline does not have:
       in 2021, so its early origins use a set-up chosen with later data. E11
       re-scores only origins from December 2022, after the selection window,
       where the set-up was fixed before every forecast was made.
+  E12 Deployment rule. A method is deployed at a horizon only if it has the
+      lowest RMSE over the full backtest AND beats the seasonal naive value on
+      the E11 origins; otherwise the seasonal naive value (last year's figure)
+      is used. A method that leads on only one of the two windows is not
+      deployed, because its lead is not stable. The E11 bootstrap compares the
+      deployed method, and any different E11 leader, with the seasonal naive
+      value, and E5 reports interval coverage on the E11 origins as well.
 
 What changed in Assessment 3
 ----------------------------
@@ -403,6 +410,21 @@ def post_selection(bt: pd.DataFrame) -> pd.DataFrame:
     return bt[bt["origin"] >= SELECTION_END]
 
 
+def deployed_methods(summary: pd.DataFrame, post_summary: pd.DataFrame) -> dict[int, str]:
+    """E12: lowest full-backtest RMSE, kept only if it also beats the seasonal
+    naive value on the E11 origins; otherwise the seasonal naive value."""
+    full_best = (summary.sort_values("RMSE").groupby("Horizon_months")
+                 .first()["Model"].to_dict())
+    post_rmse = post_summary.set_index(["Model", "Horizon_months"])["RMSE"]
+    chosen = {}
+    for h, model in full_best.items():
+        if model == SEASONAL_NAIVE or post_rmse[(model, h)] < post_rmse[(SEASONAL_NAIVE, h)]:
+            chosen[h] = model
+        else:
+            chosen[h] = SEASONAL_NAIVE
+    return chosen
+
+
 def common_window(bt: pd.DataFrame) -> pd.DataFrame:
     """Robustness check: keep only target months scored at EVERY horizon, so a
     difference between horizons cannot come from a different set of months."""
@@ -474,7 +496,7 @@ def prediction_intervals(bt: pd.DataFrame, model_by_horizon: dict[int, str],
         sub["residual"] = sub["actual"] - sub["pred"]
         lo, hi = sub["residual"].quantile([lower_q, upper_q])
 
-        hits, checked = 0, 0
+        hits, checked, hits_post, checked_post = 0, 0, 0, 0
         months = sorted(sub["target"].unique())
         for i, month in enumerate(months):
             if i < min_history_months:
@@ -482,14 +504,20 @@ def prediction_intervals(bt: pd.DataFrame, model_by_horizon: dict[int, str],
             past = sub.loc[sub["target"] < month, "residual"]
             p_lo, p_hi = past.quantile([lower_q, upper_q])
             now = sub[sub["target"] == month]
-            hits += int(((now["residual"] >= p_lo) & (now["residual"] <= p_hi)).sum())
+            inside = int(((now["residual"] >= p_lo) & (now["residual"] <= p_hi)).sum())
+            hits += inside
             checked += len(now)
+            if (now["origin"] >= SELECTION_END).all():      # E11 origins only
+                hits_post += inside
+                checked_post += len(now)
 
         rows.append({"Horizon_months": h, "Model": model,
                      "Lower_offset": float(lo), "Upper_offset": float(hi),
                      "Interval_width": float(hi - lo),
                      "Out_of_sample_coverage_%": (hits / checked * 100) if checked else np.nan,
-                     "Forecasts_checked": checked})
+                     "Forecasts_checked": checked,
+                     "Coverage_E11_origins_%": (hits_post / checked_post * 100) if checked_post else np.nan,
+                     "Forecasts_checked_E11": checked_post})
     return pd.DataFrame(rows)
 
 
@@ -598,6 +626,15 @@ def main() -> None:
         post_rows.append({"Horizon_months": h, "Challenger": challenger,
                           "Reference": MOVING_AVERAGE,
                           **paired_bootstrap(post[post["h"] == h], challenger, MOVING_AVERAGE)})
+    deployed = deployed_methods(summary, post_summary)
+    post_leaders = (post_summary.sort_values("RMSE").groupby("Horizon_months")
+                    .first()["Model"].to_dict())
+    for h in HORIZONS:
+        for challenger in dict.fromkeys([deployed[h], post_leaders[h]]):
+            if challenger != SEASONAL_NAIVE:
+                post_rows.append({"Horizon_months": h, "Challenger": challenger,
+                                  "Reference": SEASONAL_NAIVE,
+                                  **paired_bootstrap(post[post["h"] == h], challenger, SEASONAL_NAIVE)})
     post_boot = pd.DataFrame(post_rows)
     post_boot.to_csv(OUT_DIR / "E4_backtest_paired_bootstrap_post_selection.csv", index=False)
     post_winners = (post_summary.sort_values("RMSE").groupby("Horizon_months")
@@ -609,7 +646,11 @@ def main() -> None:
           ", ".join(f"h={h}: {m}" for h, m in post_winners.items()))
     print(post_boot.to_string(index=False, float_format="%.2f"))
 
-    pi = prediction_intervals(bt, winners)
+    # E12: deploy only a method that leads on the full backtest and beats
+    # the seasonal naive value on the E11 origins
+    print("[eval] E12 deployed by horizon:",
+          ", ".join(f"h={h}: {m}" for h, m in deployed.items()))
+    pi = prediction_intervals(bt, deployed)
     pi.to_csv(OUT_DIR / "E5_prediction_intervals.csv", index=False)
     print("\n=== E5 80% prediction intervals for the best entry at each horizon ===")
     print(pi.to_string(index=False, float_format="%.1f"))

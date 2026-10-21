@@ -13,9 +13,11 @@ F1  Forecasts for 1, 3, 6 and 12 months ahead from the last month of the
     processed panel, for every region. They are written to
     Outputs/staging/F1_forecasts.csv as a candidate; monitoring.py publishes
     the candidate to Outputs/F1_forecasts.csv, the file the dashboard reads,
-    only if the release checks pass (release_gate.py). Each horizon uses the method with the
-    lowest backtest RMSE (Outputs/E4_backtest_metrics.csv) and its empirical
-    80% interval (Outputs/E5_prediction_intervals.csv). The fitted models'
+    only if the release checks pass (release_gate.py). Each horizon uses the
+    method chosen by the E12 rule in evaluation.py (lowest full-backtest
+    RMSE, kept only if it also beats the seasonal naive value after the
+    selection window) and its empirical 80% interval
+    (Outputs/E5_prediction_intervals.csv). The fitted models'
     forecasts and the two benchmarks are written alongside for comparison.
 F2  One model bundle per horizon in Models/ (forecast_h1.joblib ...), trained
     on every target month up to the forecast origin with the backtested set-up
@@ -197,16 +199,18 @@ def predict_rows(rows: pd.DataFrame, fitted_h: dict) -> dict[str, np.ndarray]:
 # ---------------------------------------------------------------------------
 
 def recommended_by_horizon() -> tuple[dict, pd.DataFrame]:
-    """Lowest-RMSE entry per horizon and its interval, from evaluation.py."""
+    """Deployed method per horizon (E12 rule in evaluation.py: lowest full
+    backtest RMSE, kept only if it also beats the seasonal naive value on the
+    post-selection origins) and its interval."""
     metrics_path = OUT_DIR / "E4_backtest_metrics.csv"
+    post_path = OUT_DIR / "E4_backtest_metrics_post_selection.csv"
     pi_path = OUT_DIR / "E5_prediction_intervals.csv"
-    if not (metrics_path.exists() and pi_path.exists()):
+    if not (metrics_path.exists() and post_path.exists() and pi_path.exists()):
         raise FileNotFoundError("Run evaluation.py first: forecast.py reads "
-                                "Outputs/E4_backtest_metrics.csv and "
+                                "Outputs/E4_backtest_metrics.csv, "
+                                "Outputs/E4_backtest_metrics_post_selection.csv and "
                                 "Outputs/E5_prediction_intervals.csv.")
-    metrics = pd.read_csv(metrics_path)
-    winners = (metrics.sort_values("RMSE").groupby("Horizon_months")
-               .first()["Model"].to_dict())
+    winners = ev.deployed_methods(pd.read_csv(metrics_path), pd.read_csv(post_path))
     intervals = pd.read_csv(pi_path).set_index("Horizon_months")
     return winners, intervals
 

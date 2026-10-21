@@ -74,10 +74,10 @@ Independent of the pipeline; it builds its own panel from the processed dataset.
 | `E4_backtest_metrics.csv` | Forecast accuracy by model and horizon |
 | `E4_backtest_metrics_common_window.csv` | The same table on the target months scored at every horizon |
 | `E4_backtest_metrics_post_selection.csv` | The same table on origins from December 2022, after the 2016-2022 selection window (E11) |
-| `E4_backtest_paired_bootstrap_post_selection.csv` | The bootstrap on those origins only |
+| `E4_backtest_paired_bootstrap_post_selection.csv` | The bootstrap on those origins only: the best fitted model against the moving average, and each deployed method (and any different leader) against the seasonal naive value |
 | `E4_backtest_paired_bootstrap.csv` | Best fitted model against the moving average, with a 95% interval |
 | `E4_backtest_predictions.csv` | Every backtest forecast, by origin, target, horizon, model and region |
-| `E5_prediction_intervals.csv` | 80% prediction intervals and out-of-sample coverage |
+| `E5_prediction_intervals.csv` | 80% prediction intervals for the deployed method at each horizon (E12 rule), with out-of-sample coverage on all origins and on the post-selection origins |
 
 Takes well under a minute.
 

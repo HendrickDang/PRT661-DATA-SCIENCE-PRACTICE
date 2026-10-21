@@ -29,6 +29,7 @@ from core_data import (
     load_saved_model_a,
     run_model_training,
 )
+from release_gate import dashboard_status
 
 st.set_page_config(
     page_title="Administrator Portal - NT Crime & Resource Planning",
@@ -243,21 +244,19 @@ with tabs[1]:
 
         # Release check banner (monitoring.py)
         if mon is not None:
+            # The banner follows what was actually published (release_gate.py),
+            # not only the promotion flag from the checks.
+            status = dashboard_status(mon)
             css = {"PASS": "alert-baseline", "WARN": "alert-elevated",
-                   "FAIL": "alert-critical"}[mon["overall_status"]]
-            rel = mon.get("forecast_release") or {}
-            if mon["promote_forecasts_to_dashboard"]:
-                verdict = "Cleared for planning use; warnings are reviewed at the next release."
-            elif rel.get("action") == "rejected":
-                verdict = (f"A release check failed, so the new forecasts were not published. The ranges below "
-                           f"are the last approved forecasts (origin {rel.get('approved_origin', 'unknown')}).")
-            else:
-                verdict = "A release check failed: do not use these forecasts in briefings until reviewed."
+                   "FAIL": "alert-critical"}[status["level"]]
             st.markdown(
                 f'<div class="{css}"><b>Release check: {mon["overall_status"]}</b> '
                 f'({mon["counts"]["PASS"]} pass, {mon["counts"]["WARN"]} warning, '
                 f'{mon["counts"]["FAIL"]} fail). Crime data as at {mon["crime_data_as_at"]}, '
-                f'checked {mon["check_date"]}.<br>{verdict}</div>',
+                f'checked {mon["check_date"]}.<br>{status["verdict"]}<br>'
+                f'<i>Data vintage: this prototype is frozen at the crime release as at '
+                f'{mon["crime_data_as_at"]} for reproducibility. A newer release must pass the same '
+                f'checks before its forecasts replace these.</i></div>',
                 unsafe_allow_html=True)
         else:
             st.caption("Release checks have not been run yet (`python monitoring.py`).")
