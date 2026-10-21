@@ -100,15 +100,15 @@ with col1:
     <div class="role-card admin-card">
         <div class="card-heading" style="color: #2b6cb0;">🏛️ Administrator & Policy Portal</div>
         <div class="card-desc">
-            Designed specifically for <b>Police Commissioners, Health Directors, Cabinet Advisors, and Frontline Resource Planners</b>.<br><br>
+            Designed for <b>PFES resource planners and decision makers</b> who need region-level figures without technical detail.<br><br>
             <b>Key Features:</b>
             <ul>
-                <li><b>Spatial Crime Distribution Map</b>: Interactive NT map with per-capita victimisation layers and service hubs.</li>
+                <li><b>Spatial Crime Distribution Map</b>: Interactive NT map of assault rates per 100,000 and recorded incident counts by region.</li>
                 <li><b>Forecasts & Planning Ranges</b>: 1 to 12 month forecasts per region with 80% ranges, expected assaults per month and the latest release check.</li>
-                <li><b>Frontline Staffing Matrix</b>: High-need, Elevated and Baseline priority tiers with suggested operational responses.</li>
-                <li><b>Seasonal Surge Calendar</b>: Wet Season vs Dry Season police roster and hospital ED planning.</li>
-                <li><b>Policy Scenario Simulator</b>: Simulate real-world policy levers like wholesale alcohol supply curbs (-15%, -20%) and forecast incident reduction.</li>
-                <li><b>Zero technical jargon</b>: Plain-English, high-impact executive summaries.</li>
+                <li><b>Resource Priority Matrix</b>: High-need, Elevated and Baseline tiers that describe recorded demand; they do not prescribe deployments.</li>
+                <li><b>Seasonal Demand Calendar</b>: How recorded assaults vary between the wet and dry seasons and across months.</li>
+                <li><b>Illustrative Sensitivity Scenario</b>: How the saved model's projection changes when alcohol supply is assumed to change; stated assumptions, not the effect of any real policy.</li>
+                <li><b>Plain-language summaries</b>: Each view explains what its figures can and cannot support.</li>
             </ul>
         </div>
     </div>
@@ -124,11 +124,12 @@ with col2:
             Designed for <b>Data Scientists, Statisticians, Econometricians, and Peer Reviewers</b>.<br><br>
             <b>Key Features:</b>
             <ul>
-                <li><b>Pipeline Provenance & Assumption Log [A1–A16]</b>: Audit raw ingest schemas, ANZSOC crosswalks, and transition gaps.</li>
+                <li><b>Pipeline Provenance & Assumption Log [A1–A24]</b>: Audit raw ingest schemas, ANZSOC crosswalks, and transition gaps.</li>
                 <li><b>Statistical EDA & Fixed Effects</b>: Skewness analysis, log transformations, pooled vs within-region econometric correlations.</li>
                 <li><b>Demographic PCA Decomposition [A14]</b>: Age-group share scree plots and components explaining >90% variance.</li>
-                <li><b>Leakage-Free Feature Selection & VIF [A16]</b>: TimeSeriesSplit CV and collinearity elimination.</li>
+                <li><b>Feature Selection & VIF [A16], [A18]</b>: TimeSeriesSplit CV on the training period, lagged features and collinearity checks.</li>
                 <li><b>Model Benchmarking (Model A & B)</b>: Compare Linear Regression, Ridge, Lasso, and XGBoost with residual diagnostics and paired t-tests.</li>
+                <li><b>Backtest, Forecasts & Monitoring</b>: Rolling-origin backtest against naive benchmarks, the post-selection check, 80% intervals and the latest release check.</li>
             </ul>
         </div>
     </div>
@@ -147,5 +148,5 @@ st.markdown("""
 This project forecasts assault offences across the 6 official Northern Territory administrative regions 
 (*Greater Darwin, Central Australia, Big Rivers, East Arnhem, Barkly, Top End*) from 2015 to 2025.
 By linking monthly crime statistics with annual ABS demographic tables and quarterly wholesale alcohol supply (Pure Alcohol Content),
-the system delivers both operational resource planning recommendations and econometric policy evaluations.
+the system provides region-level forecasts with 80% planning ranges and descriptive context for resource planning. It is a decision-support prototype: its figures support planning discussions and do not establish the causes of assault or the effect of any policy.
 """)
