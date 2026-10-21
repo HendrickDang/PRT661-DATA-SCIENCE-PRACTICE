@@ -1,4 +1,4 @@
-# Runs the ingest schema tests and checks that every dashboard page loads,
+# Runs the unit tests (ingest schema, forecast release gate) and checks that every dashboard page loads,
 # on each push to main and on each pull request.
 name: Tests
 
@@ -24,7 +24,7 @@ jobs:
       - name: Install the pinned environment
         run: pip install -r requirements.txt
 
-      - name: Ingest schema tests
+      - name: Unit tests (ingest schema, forecast release gate)
         run: python -m unittest discover tests -v
 
       - name: Dashboard pages load without errors

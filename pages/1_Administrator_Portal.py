@@ -245,9 +245,14 @@ with tabs[1]:
         if mon is not None:
             css = {"PASS": "alert-baseline", "WARN": "alert-elevated",
                    "FAIL": "alert-critical"}[mon["overall_status"]]
-            verdict = ("Cleared for planning use; warnings are reviewed at the next release."
-                       if mon["promote_forecasts_to_dashboard"] else
-                       "A release check failed: do not use these forecasts in briefings until reviewed.")
+            rel = mon.get("forecast_release") or {}
+            if mon["promote_forecasts_to_dashboard"]:
+                verdict = "Cleared for planning use; warnings are reviewed at the next release."
+            elif rel.get("action") == "rejected":
+                verdict = (f"A release check failed, so the new forecasts were not published. The ranges below "
+                           f"are the last approved forecasts (origin {rel.get('approved_origin', 'unknown')}).")
+            else:
+                verdict = "A release check failed: do not use these forecasts in briefings until reviewed."
             st.markdown(
                 f'<div class="{css}"><b>Release check: {mon["overall_status"]}</b> '
                 f'({mon["counts"]["PASS"]} pass, {mon["counts"]["WARN"]} warning, '

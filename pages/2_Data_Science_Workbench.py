@@ -584,6 +584,17 @@ with ds_tabs[8]:
                              legend=dict(orientation="h", y=-0.25))
         st.plotly_chart(fig_bt, use_container_width=True)
 
+        if fo["post_selection"] is not None:
+            post = fo["post_selection"].pivot_table(index="Model", columns="Horizon_months", values="RMSE")
+            post.columns = [f"h = {c}" for c in post.columns]
+            st.markdown("##### Check after the selection window (E11): origins from December 2022 only")
+            st.dataframe(post.sort_values("h = 1").style.format("{:.1f}").highlight_min(axis=0, color="#c6f6d5"),
+                         use_container_width=True)
+            st.caption("The feature set, alphas and XGBoost settings were chosen on 2016-2022 cross-validation, "
+                       "but the backtest starts in 2021. Scoring only origins after the selection window gives "
+                       "the same recommended method at 1, 3 and 6 months; at 12 months Lasso leads on this "
+                       "shorter window but trails over the full backtest, so the seasonal naive value is kept.")
+
         c_left, c_right = st.columns(2)
         with c_left:
             if fo["bootstrap"] is not None:
@@ -605,4 +616,9 @@ with ds_tabs[8]:
             st.markdown(f"**Overall: {mon['overall_status']}**. Promote forecasts: "
                         f"{'yes' if mon['promote_forecasts_to_dashboard'] else 'no'}. "
                         f"Retraining: {mon['retraining_decision']}")
+            rel = mon.get("forecast_release")
+            if rel:
+                st.caption(f"Forecast release gate: **{rel['action']}** ({rel['reason']}). "
+                           f"The dashboard reads {rel['approved']} (origin {rel.get('approved_origin', 'n/a')}); "
+                           f"new forecasts wait in {rel['candidate']} until the checks pass.")
         st.dataframe(fo["checks"], hide_index=True, use_container_width=True)

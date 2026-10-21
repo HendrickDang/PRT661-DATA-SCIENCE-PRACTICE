@@ -15,6 +15,17 @@
     "FAIL": 0
   },
   "promote_forecasts_to_dashboard": true,
+  "forecast_release": {
+    "candidate": "Outputs/staging/F1_forecasts.csv",
+    "approved": "Outputs/F1_forecasts.csv",
+    "candidate_sha256": "24157ca007e4ba87035a5cd68c1b59f15c1e8ba1bbdcf371cd4f02b7e68a2827",
+    "approved_sha256_before": "24157ca007e4ba87035a5cd68c1b59f15c1e8ba1bbdcf371cd4f02b7e68a2827",
+    "action": "published",
+    "published": true,
+    "reason": "release checks allow promotion and the candidate is valid",
+    "approved_sha256_after": "24157ca007e4ba87035a5cd68c1b59f15c1e8ba1bbdcf371cd4f02b7e68a2827",
+    "approved_origin": "2025-12"
+  },
   "retraining_decision": "Not needed: no performance FAIL on settled months. Next planned refresh when the panel can be extended (2026 population estimates, [A1])",
   "warnings": [
     "D8: Crime release freshness - As At 01 Jun 2026, 139 days before the check date",

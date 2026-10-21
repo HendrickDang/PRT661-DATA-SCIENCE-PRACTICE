@@ -412,6 +412,7 @@ FORECAST_FILES = {
     "forecasts": "F1_forecasts.csv",
     "backtest": "E4_backtest_metrics.csv",
     "bootstrap": "E4_backtest_paired_bootstrap.csv",
+    "post_selection": "E4_backtest_metrics_post_selection.csv",
     "intervals": "E5_prediction_intervals.csv",
     "holdout_predictions": "E6_holdout_2026_predictions.csv",
     "holdout_metrics": "E6_holdout_2026_metrics.csv",

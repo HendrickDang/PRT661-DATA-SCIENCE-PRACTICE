@@ -19,7 +19,8 @@ crime statistics release and answers the design's three questions:
 Every check returns PASS, WARN or FAIL:
     PASS  no action
     WARN  document it and watch the next release
-    FAIL  do not promote the new forecasts to the Administrator Portal;
+    FAIL  do not promote the new forecasts to the Administrator Portal
+          (enforced: release_gate.py keeps the last approved file);
           open an investigation; retrain only if the FAIL repeats or is
           explained by lasting drift
 
@@ -48,8 +49,18 @@ Outputs/M2_monitoring_scored.csv     every scored forecast: month, region, horiz
                                      method, actual, forecast, error, interval flag
 Outputs/M3_monitoring_summary.json   overall status and the two decisions:
                                      promote the forecasts? retrain the models?
+                                     plus the forecast release record
+Outputs/F1_forecasts.csv             replaced by the staged candidate only when
+                                     promotion is allowed (release_gate.py)
 
-Nothing here refits a model or changes an earlier output. Each run overwrites
+Publication gate: forecast.py writes Outputs/staging/F1_forecasts.csv. After
+the checks, publish() copies it over Outputs/F1_forecasts.csv (atomic rename)
+only if no data or settled-performance check FAILs and the candidate passes
+its integrity checks. Otherwise the approved file is left untouched and the
+dashboard keeps the last approved forecast.
+
+Nothing here refits a model or changes an earlier output other than the
+approved forecast file above. Each run overwrites
 M1-M3 and records its check date in M3; earlier runs are kept in Git history.
 """
 
@@ -66,6 +77,7 @@ import pandas as pd
 
 import evaluation as ev
 import forecast as fc
+import release_gate
 import Updated_End_to_End_pipeline as pl
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -441,6 +453,14 @@ def drift_checks(log: Log, monthly: pd.DataFrame, settled_until: pd.Timestamp) -
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+def decide_promotion(checks: pd.DataFrame, settled_status: dict) -> bool:
+    """Promote only if no data check and no settled-performance check FAILs.
+    Provisional-month checks are capped at WARN and never block ([A23])."""
+    data_fail = (checks["Area"].eq("Data") & checks["Status"].eq(FAIL)).any()
+    perf_fail = any(s == FAIL for s in settled_status.values())
+    return not (data_fail or perf_fail)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("--as-of", default=None,
@@ -459,11 +479,11 @@ def main() -> None:
     drift_checks(log, monthly, info["settled_until"])
 
     checks = log.frame()
-    data_fail = (checks["Area"].eq("Data") & checks["Status"].eq(FAIL)).any()
     perf_fail = any(s == FAIL for s in settled_status.values())
     overall = worst(checks["Status"])
 
-    promote = not (data_fail or perf_fail)
+    promote = decide_promotion(checks, settled_status)
+    release = release_gate.publish(promote, OUT_DIR)
     if perf_fail:
         retrain = "Investigate first; retrain if the FAIL repeats at the next release or is explained by lasting drift"
     else:
@@ -480,6 +500,7 @@ def main() -> None:
         "overall_status": overall,
         "counts": {s: int((checks["Status"] == s).sum()) for s in (PASS, WARN, FAIL)},
         "promote_forecasts_to_dashboard": bool(promote),
+        "forecast_release": release,
         "retraining_decision": retrain,
         "warnings": [f"{r.Check_id}: {r.Check} - {r.Value}"
                      for r in checks.itertuples() if r.Status == WARN],
@@ -496,9 +517,11 @@ def main() -> None:
           f"({summary['counts'][PASS]} PASS, {summary['counts'][WARN]} WARN, "
           f"{summary['counts'][FAIL]} FAIL) ===")
     print(f"Promote forecasts to the dashboard: {'yes' if promote else 'no'}")
+    print(f"Forecast release: {release['action']} ({release['reason']})")
     print(f"Retraining: {retrain}")
     print("\n[monitor] wrote Outputs/M1_monitoring_checks.csv, "
-          "Outputs/M2_monitoring_scored.csv, Outputs/M3_monitoring_summary.json")
+          "Outputs/M2_monitoring_scored.csv, Outputs/M3_monitoring_summary.json"
+          + (", Outputs/F1_forecasts.csv (published)" if release["published"] else ""))
 
 
 if __name__ == "__main__":

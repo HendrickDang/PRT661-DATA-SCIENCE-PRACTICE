@@ -60,7 +60,7 @@ python Updated_End_to_End_pipeline.py
 
 Runs five stages in a single pass: ingest to `dataset/raw/`, panel build to `dataset/processed/`, EDA to `eda_plots/`, PCA, and the regression stage to `regression_plots/`.
 
-Ingest checks every source file before writing anything: required columns (spacing and case differences in headers are tolerated), numeric years, months 1-12, non-negative counts, alcohol and DV flags limited to `Yes` / `No` / `-`, and readable quarter dates. If any file fails, or is missing, the run stops with a `SCHEMA ERROR` or `SKIPPED` line and `dataset/raw/` keeps the last good copies. The checks are tested in `tests/test_ingest_schema.py` (`python -m unittest discover tests`). GitHub Actions runs the same tests, and loads all three dashboard pages, on every push to `main` and every pull request (`.github/workflows/tests.yml`).
+Ingest checks every source file before writing anything: required columns (spacing and case differences in headers are tolerated), numeric years, months 1-12, non-negative counts, alcohol and DV flags limited to `Yes` / `No` / `-`, and readable quarter dates. If any file fails, or is missing, the run stops with a `SCHEMA ERROR` or `SKIPPED` line and `dataset/raw/` keeps the last good copies. The checks are tested in `tests/test_ingest_schema.py`, and the forecast publication gate in `tests/test_release_gate.py` (`python -m unittest discover tests`, 28 tests). GitHub Actions runs the same tests, and loads all three dashboard pages, on every push to `main` and every pull request (`.github/workflows/tests.yml`).
 
 The regression stage also writes its tables to `Outputs/` (`R1_feature_variants_cv.csv`, `R4_model_a_metrics.csv`, `R9_per_region_accuracy.csv`, `R10_model_b_metrics.csv`) so reports and slides quote files instead of console output.
 
@@ -98,6 +98,8 @@ XGBoost's skill against the seasonal naive benchmark at one month is 27.4%. Its 
 
 The same ranking holds when all horizons are scored on the same target months (`E4_backtest_metrics_common_window.csv`).
 
+**Check after the selection window (E11).** The feature variant, alphas and XGBoost settings are chosen once on 2016-2022 cross-validation, while the backtest starts in 2021, so its early origins use a set-up chosen with later data. `E4_backtest_metrics_post_selection.csv` re-scores only origins from December 2022, after the selection window. The recommended method is unchanged at 1, 3 and 6 months: XGBoost 97.0 against the moving average 99.2 at one month (27.5% skill, but ahead in only 67% of bootstrap resamples, `E4_backtest_paired_bootstrap_post_selection.csv`), the moving average at 3 and 6 months (108.0 and 117.6). At 12 months Lasso (119.4) leads the seasonal naive value (126.1) on this shorter window but trails it over the full backtest, so the simpler seasonal naive value is kept. The one-month lead of XGBoost over the moving average should be treated as small.
+
 ## Running the forecast stage
 
 ```bash
@@ -108,7 +110,7 @@ Run after the pipeline and `evaluation.py`: it reads the backtest tables to pick
 
 What it does:
 
-- **F1 forecasts.** From the last month of the processed panel (December 2025) it forecasts every region 1, 3, 6 and 12 months ahead (January, March, June and December 2026). Each horizon uses the method with the lowest backtest RMSE and its empirical 80% interval: XGBoost at one month, the 12-month moving average at three and six months, the seasonal naive value at twelve. The other models' forecasts are written alongside for comparison. Saved to `Outputs/F1_forecasts.csv` and plotted in `regression_plots/R9_forecasts_2026.png`.
+- **F1 forecasts.** From the last month of the processed panel (December 2025) it forecasts every region 1, 3, 6 and 12 months ahead (January, March, June and December 2026). Each horizon uses the method with the lowest backtest RMSE and its empirical 80% interval: XGBoost at one month, the 12-month moving average at three and six months, the seasonal naive value at twelve. The other models' forecasts are written alongside for comparison. Saved as a candidate to `Outputs/staging/F1_forecasts.csv` and plotted in `regression_plots/R9_forecasts_2026.png`; `monitoring.py` publishes it to `Outputs/F1_forecasts.csv` only if the release checks pass.
 - **Saved models.** One bundle per horizon in `Models/` (`forecast_h1.joblib` to `forecast_h12.joblib`), trained on every target month to December 2025 with the backtested set-up. The pipeline also saves Model A as `Models/model_a.joblib` [A21].
 - **E6 out-of-sample check.** The latest crime file (As At 1 June 2026) already contains January to April 2026, which the processed panel stops short of because population figures end in 2025. No model has seen these months. The saved models are kept frozen and scored on them: four target months at one month ahead, two at three months, six regions each. Rates use the 2025 population [A22].
 
@@ -121,7 +123,7 @@ Headline result on the 2026 months (RMSE per 100,000, provisional actuals):
 
 All four fitted models beat both benchmarks on these months, and the linear models beat XGBoost at both horizons. XGBoost's one-month error (103.8) is close to its backtest error (99.8), but its 80% interval covered only 15 of 24 outcomes (62.5%). Every method forecasts above the outcome on average, which is expected: all 2026 months are within six months of the As At date, so the counts are provisional and will rise [A23]. With four months and six regions, this check cannot overturn the four-year backtest. It is the first data point for the monitoring stage, which should re-score these months once they are final.
 
-`F1_forecasts.csv` has one row per origin, horizon, region and model, with `Recommended = True` on the method to show and `Lower_80` / `Upper_80` filled for that method. The dashboard reads it directly for the Forecasts & Planning Ranges tab.
+`F1_forecasts.csv` has one row per origin, horizon, region and model, with `Recommended = True` on the method to show and `Lower_80` / `Upper_80` filled for that method. The dashboard reads the approved copy, `Outputs/F1_forecasts.csv`, for the Forecasts & Planning Ranges tab; it never reads the staged candidate.
 
 ## Running the release checks (monitoring)
 
@@ -139,7 +141,9 @@ Run after `forecast.py`, and again after every new NT crime statistics release. 
 | Newest months (N, NC) | The same rules on the 2026 months scored by `forecast.py` | Provisional actuals never FAIL; a FAIL is shown as WARN [A23] |
 | Drift (R1-R3) | Regional rate against the same quarter of the previous three years; alcohol- and DV-involved shares | WARN for human review only [A24]; never an automatic retrain |
 
-It writes `Outputs/M1_monitoring_checks.csv` (one row per check), `Outputs/M2_monitoring_scored.csv` (every scored forecast with its error and whether it fell inside the 80% interval) and `Outputs/M3_monitoring_summary.json` (overall status and two decisions: promote the forecasts to the dashboard, and retrain or not). A FAIL on settled months stops the forecasts being promoted and opens an investigation; retraining follows only if the FAIL repeats or is explained by lasting drift. Planned refreshes happen when the panel can be extended, which needs the 2026 population estimates [A1].
+It writes `Outputs/M1_monitoring_checks.csv` (one row per check), `Outputs/M2_monitoring_scored.csv` (every scored forecast with its error and whether it fell inside the 80% interval) and `Outputs/M3_monitoring_summary.json` (overall status and two decisions: promote the forecasts to the dashboard, and retrain or not). A FAIL on a data check or on settled months stops the forecasts being promoted and opens an investigation; retraining follows only if the FAIL repeats or is explained by lasting drift. Planned refreshes happen when the panel can be extended, which needs the 2026 population estimates [A1].
+
+**Publication gate (`release_gate.py`).** The promotion decision is enforced in code. After the checks, `monitoring.py` copies the staged candidate over `Outputs/F1_forecasts.csv` (temporary file and atomic rename) only if promotion is allowed and the candidate passes integrity checks: one recommended forecast per region and horizon, a single origin, finite non-negative values, and an 80% range that contains the forecast. Otherwise the approved file is left untouched, the dashboard keeps the last approved forecast and says so, and the rejected candidate stays in `Outputs/staging/` for investigation. The decision and file hashes are recorded under `forecast_release` in `M3_monitoring_summary.json`. `tests/test_release_gate.py` forces a FAIL and checks that the approved file and the dashboard data do not change.
 
 Result of the check on 18 October 2026: **WARN, 19 PASS, 6 WARN, 0 FAIL**, forecasts promoted, no retraining needed. On the latest settled months XGBoost keeps 28.4% skill at one month and every interval covers 74-81% of outcomes. The warnings are the age of the crime file (As At 1 June 2026), 2026 rates using 2025 population, the low interval coverage and three-month error on the provisional 2026 months, and a drift flag: Central Australia's October-December 2025 rate is 32% below the same quarter of 2022-2024, a sustained fall the review should confirm is real rather than a recording change.
 
@@ -199,7 +203,8 @@ In Assessment 2 the two scales disagreed (V4 on the log scale, V2 on the rate sc
 | `diagrams/` | Architecture and workflow diagrams |
 | `Reports/` | Assessment reports |
 | `audit/` | Assessment 3 read-only data lineage, reproducibility and leakage audit |
-| `tests/` | Tests for the ingest schema check; they run ingest in a temporary copy and never write to `dataset/` |
+| `release_gate.py` | Publishes a staged forecast to the dashboard only when the release checks pass |
+| `tests/` | Tests for the ingest schema check and the forecast publication gate; they work in temporary copies and never write to `dataset/` or `Outputs/` |
 | `Environment Setup Instructions/` | Environment setup, including `requirements.txt` |
 | `Execution Instructions/` | Run instructions |
 | `CHANGELOG.md` | Change log: all changes since Assessment 1, with justification |

@@ -10,7 +10,10 @@ Run order:
 What it adds
 ------------
 F1  Forecasts for 1, 3, 6 and 12 months ahead from the last month of the
-    processed panel, for every region. Each horizon uses the method with the
+    processed panel, for every region. They are written to
+    Outputs/staging/F1_forecasts.csv as a candidate; monitoring.py publishes
+    the candidate to Outputs/F1_forecasts.csv, the file the dashboard reads,
+    only if the release checks pass (release_gate.py). Each horizon uses the method with the
     lowest backtest RMSE (Outputs/E4_backtest_metrics.csv) and its empirical
     80% interval (Outputs/E5_prediction_intervals.csv). The fitted models'
     forecasts and the two benchmarks are written alongside for comparison.
@@ -59,6 +62,7 @@ import Updated_End_to_End_pipeline as pl
 
 BASE_DIR = Path(__file__).resolve().parent
 OUT_DIR = BASE_DIR / "Outputs"
+STAGING_DIR = OUT_DIR / "staging"      # candidate forecasts, published by monitoring.py
 MODEL_DIR = BASE_DIR / "Models"
 PLOT_DIR = BASE_DIR / "regression_plots"
 
@@ -231,7 +235,8 @@ def make_forecasts(base_ext: pd.DataFrame, fitted: dict, origin: pd.Timestamp,
                     "Data_as_at": as_at,
                 })
     out = pd.DataFrame(records)
-    out.to_csv(OUT_DIR / "F1_forecasts.csv", index=False)
+    STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    out.to_csv(STAGING_DIR / "F1_forecasts.csv", index=False)
     return out
 
 
@@ -410,8 +415,11 @@ def main() -> None:
     }
     (OUT_DIR / "forecast_run_summary.json").write_text(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    print("\n[forecast] wrote Outputs/F1_forecasts.csv, Outputs/E6_holdout_2026_*.csv, "
-          "Outputs/forecast_run_summary.json, regression_plots/R9_forecasts_2026.png")
+    print("\n[forecast] wrote the candidate Outputs/staging/F1_forecasts.csv, "
+          "Outputs/E6_holdout_2026_*.csv, Outputs/forecast_run_summary.json, "
+          "regression_plots/R9_forecasts_2026.png")
+    print("[forecast] run monitoring.py next: it publishes the candidate to "
+          "Outputs/F1_forecasts.csv only if the release checks pass")
 
 
 if __name__ == "__main__":

@@ -73,6 +73,8 @@ Independent of the pipeline; it builds its own panel from the processed dataset.
 | `E2_variant_selection_cv.csv` | Feature variant comparison on training-period CV |
 | `E4_backtest_metrics.csv` | Forecast accuracy by model and horizon |
 | `E4_backtest_metrics_common_window.csv` | The same table on the target months scored at every horizon |
+| `E4_backtest_metrics_post_selection.csv` | The same table on origins from December 2022, after the 2016-2022 selection window (E11) |
+| `E4_backtest_paired_bootstrap_post_selection.csv` | The bootstrap on those origins only |
 | `E4_backtest_paired_bootstrap.csv` | Best fitted model against the moving average, with a 95% interval |
 | `E4_backtest_predictions.csv` | Every backtest forecast, by origin, target, horizon, model and region |
 | `E5_prediction_intervals.csv` | 80% prediction intervals and out-of-sample coverage |
@@ -89,7 +91,7 @@ Run after steps 3 and 4: it reads `Outputs/E4_backtest_metrics.csv` and `Outputs
 
 | File | Contents |
 | --- | --- |
-| `Outputs/F1_forecasts.csv` | Forecasts from December 2025 at 1, 3, 6 and 12 months for every region and model, with the 80% interval on the recommended method |
+| `Outputs/staging/F1_forecasts.csv` | Candidate forecasts from December 2025 at 1, 3, 6 and 12 months for every region and model, with the 80% interval on the recommended method. Published by step 6 only if the release checks pass |
 | `Outputs/E6_holdout_2026_metrics.csv` | Frozen models scored on January to April 2026 (provisional actuals), with bias and interval coverage |
 | `Outputs/E6_holdout_2026_predictions.csv` | Every forecast behind that table |
 | `Outputs/forecast_run_summary.json` | Origin, data As At date, set-up and package versions |
@@ -119,9 +121,10 @@ Run after step 5, and after every new crime statistics release (without `--as-of
 | --- | --- |
 | `Outputs/M1_monitoring_checks.csv` | One row per check: area, value, rule, PASS / WARN / FAIL and a note |
 | `Outputs/M2_monitoring_scored.csv` | Every scored forecast: month, region, horizon, method, actual, forecast, error, inside the 80% interval or not, settled or provisional |
-| `Outputs/M3_monitoring_summary.json` | Overall status, counts, and the decisions to promote the forecasts and whether to retrain |
+| `Outputs/M3_monitoring_summary.json` | Overall status, counts, the decisions to promote the forecasts and whether to retrain, and the forecast release record (`forecast_release`) |
+| `Outputs/F1_forecasts.csv` | The approved forecasts the dashboard reads. Replaced by the staged candidate only when promotion is allowed and the candidate passes its integrity checks; otherwise left unchanged |
 
-The console ends with the overall result, `Promote forecasts to the dashboard: yes/no` and the retraining decision.
+The console ends with the overall result, `Promote forecasts to the dashboard: yes/no`, `Forecast release: published/rejected` and the retraining decision.
 
 ## 7. Run the dashboard
 

@@ -24,6 +24,11 @@ pieces the main pipeline does not have:
       before the target. See "What changed in Assessment 3" below.
   E10 Paired bootstrap on the difference between the best model and the
       12-month moving average, so a small gap is not reported as a win.
+  E11 Post-selection check. The feature variant, alphas and XGBoost settings
+      are chosen once on 2016-2022 cross-validation, but the backtest starts
+      in 2021, so its early origins use a set-up chosen with later data. E11
+      re-scores only origins from December 2022, after the selection window,
+      where the set-up was fixed before every forecast was made.
 
 What changed in Assessment 3
 ----------------------------
@@ -76,6 +81,7 @@ HORIZONS = (1, 3, 6, 12)
 MIN_TRAIN_MONTHS = 60       # shortest training window, at every horizon
 REFIT_EVERY = 3             # months between refits (expanding window)
 TRAIN_END_YEAR = 2022       # CV for variant and alpha selection stops here
+SELECTION_END = pd.Timestamp(f"{TRAIN_END_YEAR}-12-01")   # E11
 ALPHAS = (0.01, 0.1, 1, 10, 100)
 
 SEASONAL_NAIVE = "Seasonal naive (t-12)"
@@ -390,6 +396,13 @@ def skill_vs_baseline(summary: pd.DataFrame,
     return out
 
 
+def post_selection(bt: pd.DataFrame) -> pd.DataFrame:
+    """E11: keep forecasts whose origin is on or after the last month used to
+    choose the set-up (December of TRAIN_END_YEAR), so no forecast benefits
+    from a specification selected with data after its origin."""
+    return bt[bt["origin"] >= SELECTION_END]
+
+
 def common_window(bt: pd.DataFrame) -> pd.DataFrame:
     """Robustness check: keep only target months scored at EVERY horizon, so a
     difference between horizons cannot come from a different set of months."""
@@ -572,6 +585,29 @@ def main() -> None:
     print("\n=== E10 best fitted model vs 12-month moving average "
           "(RMSE difference, negative = model better) ===")
     print(boot.to_string(index=False, float_format="%.2f"))
+
+    # E11: same scoring on origins after the selection window only
+    post = post_selection(bt)
+    post_summary = skill_vs_baseline(summarise_backtest(post))
+    post_summary.to_csv(OUT_DIR / "E4_backtest_metrics_post_selection.csv", index=False)
+    post_rows = []
+    for h in HORIZONS:
+        at_h = post_summary[(post_summary["Horizon_months"] == h)
+                            & post_summary["Model"].isin(fitted_names)]
+        challenger = at_h.sort_values("RMSE").iloc[0]["Model"]
+        post_rows.append({"Horizon_months": h, "Challenger": challenger,
+                          "Reference": MOVING_AVERAGE,
+                          **paired_bootstrap(post[post["h"] == h], challenger, MOVING_AVERAGE)})
+    post_boot = pd.DataFrame(post_rows)
+    post_boot.to_csv(OUT_DIR / "E4_backtest_paired_bootstrap_post_selection.csv", index=False)
+    post_winners = (post_summary.sort_values("RMSE").groupby("Horizon_months")
+                    .first()["Model"].to_dict())
+    print(f"\n=== E11 origins from {SELECTION_END:%Y-%m} (after the selection window) ===")
+    print(post_summary.pivot(index="Model", columns="Horizon_months", values="RMSE")
+          .round(1).to_string())
+    print("[eval] E11 lowest RMSE by horizon:",
+          ", ".join(f"h={h}: {m}" for h, m in post_winners.items()))
+    print(post_boot.to_string(index=False, float_format="%.2f"))
 
     pi = prediction_intervals(bt, winners)
     pi.to_csv(OUT_DIR / "E5_prediction_intervals.csv", index=False)
